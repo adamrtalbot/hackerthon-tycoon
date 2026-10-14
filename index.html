@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hackathon Tycoon: nf-core edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#E3EBE6; --panel:#FFFFFF; --panel2:#EEF3F0; --ink:#1B2A22; --muted:#56675E; --line:#C4D2CA;
+  --accent:#1F9D5B; --accent-ink:#FFFFFF; --warn:#B87D06; --bad:#C23A2F; --slack:#4A154B; --live:#FFF6DC;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111A15; --panel:#1A2620; --panel2:#213029; --ink:#E3ECE6; --muted:#97AA9F; --line:#2F4137;
+    --accent:#3BC47A; --accent-ink:#0D1A12; --warn:#E5AE3A; --bad:#EF6A5E; --slack:#D1A6D2; --live:#2E2A1A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111A15; --panel:#1A2620; --panel2:#213029; --ink:#E3ECE6; --muted:#97AA9F; --line:#2F4137;
+  --accent:#3BC47A; --accent-ink:#0D1A12; --warn:#E5AE3A; --bad:#EF6A5E; --slack:#D1A6D2; --live:#2E2A1A;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%}
+.px{font-family:"Silkscreen","Courier New",monospace;letter-spacing:.02em}
+#app{max-width:1100px;margin:0 auto;padding:10px 10px 24px;display:grid;gap:10px;grid-template-columns:1fr;grid-template-areas:"hud" "ci" "map" "inspect" "side"}
+@media (min-width:880px){
+  #app{grid-template-columns:minmax(0,560px) minmax(0,1fr);grid-template-areas:"hud hud" "ci side" "map side" "inspect side";grid-template-rows:auto auto auto 1fr;align-items:start}
+}
+.hud{grid-area:hud;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.brand{font-size:18px;font-weight:700;margin-right:auto}
+.clock{font-size:14px}
+.speed{display:flex;gap:4px}
+.stats{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.stat{background:var(--panel);border:2px solid var(--ink);border-radius:6px;padding:2px 8px;font-size:13px;display:flex;gap:4px;align-items:center}
+button.stat{font:inherit;font-size:13px;color:var(--ink);cursor:pointer}
+button.stat:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.pills{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.pill{font-size:12px;line-height:18px;border-radius:10px;padding:0 7px;background:var(--panel);border:1.5px solid var(--line);white-space:nowrap}
+.pill.ok{border-color:var(--accent)}
+.pill.bad{border-color:var(--bad);color:var(--bad)}
+.card .chips{margin:2px 0 6px}
+.ci-head .lights{margin:0 0 0 4px}
+.fp{display:inline-grid;gap:1px;vertical-align:middle;margin-left:6px}
+.fp i{width:9px;height:9px;background:var(--ink);opacity:.55;border-radius:1px}
+.stat.danger{border-color:var(--bad);color:var(--bad);font-weight:700}
+#mapwrap{grid-area:map;position:relative;justify-self:center;width:100%;max-width:560px}
+#map{display:block;margin:0 auto;border:3px solid var(--ink);border-radius:6px;touch-action:manipulation;cursor:pointer;background:#3F5D78}
+#toast{position:absolute;left:8px;right:8px;top:8px;background:var(--panel);color:var(--ink);border:2px solid var(--ink);border-radius:6px;padding:8px 10px;font-size:14px;box-shadow:0 3px 0 var(--ink);display:none;cursor:pointer;text-align:left;width:calc(100% - 16px);font-family:inherit}
+#toast b{color:var(--slack)}
+#modebar{position:absolute;left:8px;right:8px;bottom:8px;background:var(--panel);border:2px solid var(--ink);border-radius:6px;padding:6px 8px;display:none;align-items:center;gap:8px;font-size:14px}
+#modebar span{flex:1}
+#cibar{grid-area:ci;background:var(--panel);border:2px solid var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;width:100%;max-width:566px;justify-self:center}
+.ci-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.ci-head .px{font-size:14px}
+.lights{display:flex;flex-wrap:wrap;gap:3px;margin:6px 0 0}
+.light{width:10px;height:10px;border-radius:2px;background:var(--accent);border:1px solid var(--ink)}
+.light.pipe{width:18px;border-radius:3px}
+.light.risk{background:var(--warn)}
+.light.bad{background:var(--bad);animation:blink 1s steps(2) infinite}
+.ci-red{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:6px}
+.ci-red b{color:var(--bad)}
+@keyframes blink{50%{opacity:.35}}
+#inspect{grid-area:inspect}
+.side{grid-area:side;display:flex;flex-direction:column;gap:8px;min-width:0}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.tab{position:relative}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.badge{position:absolute;top:-8px;right:-6px;background:var(--bad);color:#fff;border-radius:10px;font-size:11px;min-width:20px;padding:1px 5px;line-height:16px}
+#panel{background:var(--panel);border:2px solid var(--ink);border-radius:6px;padding:10px;min-height:200px;max-height:70vh;overflow-y:auto}
+@media (min-width:880px){#panel{max-height:calc(100vh - 160px)}}
+.btn{font:inherit;font-size:14px;border:2px solid var(--ink);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 10px;min-height:38px;box-shadow:0 3px 0 var(--ink);cursor:pointer;touch-action:manipulation}
+.btn:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.small{min-height:32px;padding:3px 8px;font-size:13px}
+.btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.btn:focus-visible,#toast:focus-visible,#map:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.grid-build{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.bitem{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;text-align:left;align-items:center;min-height:60px}
+.bitem .ic{font-size:26px;grid-row:span 2}
+.bitem small{color:inherit;opacity:.8}
+.bitem{min-height:52px}
+.hint{color:var(--muted);font-size:13px;margin:0 0 10px}
+.card{border:2px solid var(--line);border-radius:6px;padding:8px;margin-bottom:8px;background:var(--panel2)}
+.card h3{margin:0 0 6px;font-size:15px;display:flex;gap:6px;align-items:center}
+.card h3 .cost{margin-left:auto;font-weight:400}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px}
+.chip{font-size:12px;border:1.5px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--muted);background:var(--panel)}
+.chip.ok{border-color:var(--accent);color:var(--ink)}
+.chip.ok::before{content:"✓ ";color:var(--accent);font-weight:700}
+.chip.bad{border-color:var(--bad);color:var(--bad)}
+.chip.bad::before{content:"✗ ";color:var(--bad)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.status-ok{color:var(--accent);font-weight:700}
+.status-bad{color:var(--bad);font-weight:700}
+.msg{display:grid;grid-template-columns:34px 1fr;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line)}
+.msg.live{background:var(--live);border-radius:6px}
+.av{width:34px;height:34px;border-radius:6px;display:grid;place-items:center;font-size:18px}
+.meta{font-size:13px;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+.meta .ch{color:var(--slack);font-weight:700}
+.meta .tm{color:var(--muted)}
+.msg p{margin:2px 0 6px;overflow-wrap:anywhere}
+.msg code{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:13px}
+.choice{font-size:13px;color:var(--muted)}
+.bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:13px;margin:6px 0}
+.bar{height:10px;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;background:var(--panel)}
+.bar i{display:block;height:100%}
+#inspect .card{background:var(--panel);border-color:var(--ink)}
+#overlay{position:fixed;inset:0;background:rgba(10,20,15,.6);display:none;align-items:center;justify-content:center;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:10}
+.modal{background:var(--panel);color:var(--ink);border:3px solid var(--ink);border-radius:8px;box-shadow:0 6px 0 var(--ink);max-width:460px;width:100%;padding:18px;max-height:100%;overflow-y:auto}
+.modal h2{font-size:24px;margin:0 0 8px;line-height:1.15}
+.modal p{margin:0 0 10px}
+.modal ul{margin:0 0 14px;padding-left:20px}
+.modal li{margin-bottom:6px}
+.score{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:8px 0 14px}
+.score .tot{font-weight:700;border-top:2px solid var(--ink);padding-top:4px}
+.lib h4{margin:10px 0 4px;font-size:14px}
+@media (prefers-reduced-motion:reduce){.btn:active:not(:disabled){transform:none}.light.bad{animation:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="hud">
+    <div class="brand px">Hackathon Tycoon</div>
+    <div class="clock px" id="clock">Day 1, 09:00</div>
+    <div class="speed" role="group" aria-label="Game speed">
+      <button class="btn small" data-act="speed" data-arg="0" aria-label="Pause">⏸</button>
+      <button class="btn small" data-act="speed" data-arg="1" aria-label="Normal speed">▶</button>
+      <button class="btn small" data-act="speed" data-arg="3" aria-label="Fast">⏩</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div id="cibar" aria-live="polite"></div>
+  <div id="mapwrap">
+    <canvas id="map" aria-label="Hackathon venue floor plan"></canvas>
+    <button id="toast" data-act="tab" data-arg="slack" aria-live="polite"></button>
+    <div id="modebar"><span id="modetext"></span><button class="btn small" id="rotbtn" data-act="rotate">Rotate</button><button class="btn small" data-act="cancel">Done</button></div>
+  </div>
+  <div id="inspect"></div>
+  <div class="side">
+    <nav class="tabs" role="tablist">
+      <button class="btn tab" role="tab" data-act="tab" data-arg="build">Build</button>
+      <button class="btn tab" role="tab" data-act="tab" data-arg="pipes">Pipelines</button>
+      <button class="btn tab" role="tab" data-act="tab" data-arg="slack">Slack<span class="badge" id="badge" hidden></span></button>
+      <button class="btn tab" role="tab" data-act="tab" data-arg="team">Team</button>
+    </nav>
+    <section id="panel"></section>
+  </div>
+</div>
+<div id="overlay"></div>
+
+<script>
+"use strict";
+const DPR=Math.min(2,window.devicePixelRatio||1);
+const COLS=12, ROWS=16, DAY_LEN=150, DAYS=3;
+const DOOR=[[5,ROWS-1],[6,ROWS-1]];
+const EMOJI='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+const PXF='"Silkscreen","Courier New",monospace';
+
+const FAC={
+  table:{label:'Hacking table',icon:'💻',cost:40,cap:2,dur:14,col:'#A7744A',desc:'Hackers write modules here.'},
+  coffee:{label:'Coffee urn',icon:'☕',cost:60,cap:2,dur:4,need:'caffeine',gain:18,col:'#6F4E37',desc:'Caffeine. Speeds up module writing.'},
+  pizza:{label:'Pizza table',icon:'🍕',cost:80,cap:3,dur:5,need:'hunger',gain:14,col:'#D9822B',desc:'Keeps hunger away.'},
+  beanbag:{label:'Beanbags',icon:'🛋️',cost:50,cap:2,dur:6,need:'energy',gain:12,col:'#B8507F',desc:'Restores energy.'},
+  stickers:{label:'Sticker stand',icon:'🏷️',cost:70,cap:2,dur:3,need:'fun',gain:12,col:'#3A9D8F',desc:'Cheap fun. Everyone wants hex stickers.'},
+  help:{label:'Help desk',icon:'🙋',cost:120,cap:1,dur:4,col:'#2F6DB5',desc:'Lowers frustration. #help, in person.'}
+};
+const FIELDS={variants:{label:'Variants'},microbes:{label:'Microbes'},expression:{label:'Expression'}};
+const PIPES={
+  ampliseq:{w:2,h:1,slots:3,icon:'🔬',cost:180,col:'#3E8E7E',mods:['cutadapt','fastqc','multiqc'],field:'microbes',run:1,fun:30,draw:1,upkeep:.6,rel:8,up:['seqkit/stats','gunzip']},
+  taxprofiler:{w:3,h:1,slots:4,icon:'🌳',cost:200,col:'#4F8133',mods:['kraken2/kraken2','fastqc','multiqc'],field:'microbes',run:2,fun:35,draw:1.5,upkeep:.8,rel:10,up:['untar','seqkit/stats']},
+  methylseq:{w:3,h:1,slots:4,icon:'🧶',cost:240,col:'#8E4F84',mods:['bismark/align','trimgalore','multiqc'],field:'expression',run:2,fun:35,draw:1.5,upkeep:.9,rel:10,up:['samtools/sort','picard/markduplicates']},
+  chipseq:{w:2,h:2,slots:4,icon:'📍',cost:260,col:'#A85A33',mods:['bowtie2/align','macs2/callpeak','deeptools/bamcoverage'],field:'expression',run:3,fun:40,draw:2,upkeep:1,rel:12,up:['samtools/index','bedtools/genomecov']},
+  viralrecon:{w:2,h:2,slots:4,icon:'🦠',cost:260,col:'#AE3D39',mods:['ivar/variants','bowtie2/align','cutadapt'],field:'variants',run:3,fun:40,draw:2.5,upkeep:1,rel:12,up:['samtools/sort','untar']},
+  rnaseq:{w:3,h:2,slots:5,icon:'🧬',cost:300,col:'#2C74AA',mods:['fastqc','trimgalore','star/align','salmon/quant','multiqc'],field:'expression',run:5,fun:50,draw:4,upkeep:1.2,rel:14,up:['samtools/sort','picard/markduplicates']},
+  mag:{w:3,h:2,slots:5,icon:'🌊',cost:320,col:'#3A5AA0',mods:['megahit','spades','prokka'],field:'microbes',run:5,fun:45,draw:3,upkeep:1.3,rel:14,up:['gunzip','seqkit/stats']},
+  sarek:{w:4,h:2,slots:6,icon:'🧪',cost:360,col:'#62469E',mods:['fastqc','bwa/mem','gatk4/markduplicates','gatk4/haplotypecaller'],field:'variants',run:7,fun:55,draw:5,upkeep:1.5,rel:16,up:['samtools/index','bedtools/genomecov']}
+};
+const NEEDED=[...new Set(Object.values(PIPES).flatMap(p=>p.mods))];
+const EXTRA=['samtools/sort','samtools/index','bedtools/genomecov','picard/markduplicates','seqkit/stats','untar','gunzip'];
+const ALL_MODS=[...NEEDED,...EXTRA];
+const HANDLES=['fastq_fan','bam_bam','conda_carl','samtools_sam','gpu_gertrude','tabs_not_spaces','resume_rosa','groovy_greta','channel_chris','yaml_yusuf','lint_lena','dsl2_dev','multiqc_mo','wave_wendy','docker_dot','emit_emeka','tuple_tom','bioconda_bea','publishdir_pia','params_priya','meta_map_max','stub_sofia','queue_quinn','container_cal','nftest_nina','workdir_will','scratch_sara','fusion_fred'];
+const SHIRTS=['#F2C14E','#F78154','#5BBF8F','#D45E8A','#7FC8F8','#B39DDB','#E07A5F','#9BC53D','#FFD23F','#EE6C4D'];
+const BOT={name:'nf-core-bot',av:'🤖',col:'#1F9D5B'};
+const GH={name:'github',av:'🐙',col:'#3B3B3B'};
+const CORE={name:'core-team',av:'🛠️',col:'#2F6DB5'};
+const VENUE={name:'venue',av:'🏢',col:'#8A6D3B'};
+const RED_REASONS=['nf-test snapshot mismatch','conda solve timed out','a container tag went missing','lint: meta.yml missing a field','stub run failed','MultiQC report changed by one pixel'];
+
+const $=s=>document.querySelector(s);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const md=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>');
+const inb=(c,r)=>c>=0&&r>=0&&c<COLS&&r<ROWS;
+
+let S, T=30;
+const canvas=$('#map'), ctx=canvas.getContext('2d');
+
+/* ---------- setup ---------- */
+function newGame(){
+  S={credits:550,stars:0,merged:0,released:0,day:1,t:0,speed:1,paused:true,over:false,
+    grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
+    objs:[],hackers:[],staff:[],mods:new Set(['fastqc','multiqc']),prs:[],slack:[],unread:0,
+    rep:60,mode:null,sel:null,tab:'build',nextId:1,spawnT:3,nextEvent:45,nextChat:7,
+    breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],debtDays:0,lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
+    names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0};
+  addObj('fac','table',3,8); addObj('fac','table',8,8); addObj('fac','coffee',5,4);
+  for(let i=0;i<4;i++) spawnHacker();
+  post('#hackathon',BOT,'Welcome to the nf-core hackathon! 🎉 Grab a table, write some modules, ship some pipelines.');
+  checkUnlocks(true);
+  S.unread=0;
+}
+function nid(){return S.nextId++}
+function objById(id){return S.objs.find(o=>o.id===id)}
+function cap(o){return o.kind==='pipe'?PIPES[o.type].slots+o.level-1:FAC[o.type].cap}
+
+function addObj(kind,type,c,r,rot){
+  const ps=kind==='pipe'?PIPES[type]:null,w=ps?(rot?ps.h:ps.w):1,h=ps?(rot?ps.w:ps.h):1;
+  const o={id:nid(),kind,type,c,r,w,h,users:0,broken:false,runs:0,green:0,released:false,msg:null,claimed:false,level:1,comm:0,issueT:0,badMod:null};
+  for(let y=r;y<r+h;y++)for(let x=c;x<c+w;x++)S.grid[y][x]=o.id;
+  S.objs.push(o);
+  return o;
+}
+function removeObj(o){
+  for(let y=o.r;y<o.r+o.h;y++)for(let x=o.c;x<o.c+o.w;x++)S.grid[y][x]=null;
+  S.objs=S.objs.filter(x=>x!==o);
+  for(const a of [...S.hackers,...S.staff]) if(a.target===o.id){a.target=null;a.path=[];a.state='idle'}
+  if(o.msg) resolveMsg(o.msg,'Pipeline removed');
+}
+function isDoor(c,r){return DOOR.some(([x,y])=>x===c&&y===r)}
+function canPlace(c,r,w,h){
+  for(let y=r;y<r+h;y++)for(let x=c;x<c+w;x++){ if(!inb(x,y)||S.grid[y][x]!==null||isDoor(x,y)) return false; }
+  // walkway check: all free tiles must stay connected to the door
+  for(let y=r;y<r+h;y++)for(let x=c;x<c+w;x++)S.grid[y][x]=-1;
+  const {d}=bfs(DOOR[0][0],DOOR[0][1]);
+  let ok=true;
+  for(let y=0;y<ROWS&&ok;y++)for(let x=0;x<COLS;x++) if(S.grid[y][x]===null&&d[x+y*COLS]<0){ok=false;break}
+  for(let y=r;y<r+h;y++)for(let x=c;x<c+w;x++)S.grid[y][x]=null;
+  return ok;
+}
+
+/* ---------- pathfinding ---------- */
+const DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+function bfs(sc,sr){
+  const N=COLS*ROWS, d=new Int16Array(N).fill(-1), prev=new Int16Array(N).fill(-1);
+  const s=sc+sr*COLS; d[s]=0; const q=[s]; let i=0;
+  while(i<q.length){
+    const k=q[i++], c=k%COLS, r=(k/COLS)|0;
+    for(const [dc,dr] of DIRS){
+      const nc=c+dc, nr=r+dr; if(!inb(nc,nr))continue;
+      const nk=nc+nr*COLS; if(d[nk]>=0||S.grid[nr][nc]!==null)continue;
+      d[nk]=d[k]+1; prev[nk]=k; q.push(nk);
+    }
+  }
+  return {d,prev,s};
+}
+function pathFrom(prev,s,e){const p=[];let k=e;while(k!==s&&k>=0){p.push([k%COLS,(k/COLS)|0]);k=prev[k]}return p.reverse()}
+function adj(o){
+  const out=[];
+  for(let x=o.c;x<o.c+o.w;x++){out.push([x,o.r-1]);out.push([x,o.r+o.h])}
+  for(let y=o.r;y<o.r+o.h;y++){out.push([o.c-1,y]);out.push([o.c+o.w,y])}
+  return out.filter(([x,y])=>inb(x,y)&&S.grid[y][x]===null);
+}
+function tileOf(a){return [Math.floor(a.x),Math.floor(a.y)]}
+function unstick(a){
+  const [c,r]=tileOf(a);
+  if(inb(c,r)&&S.grid[r][c]===null)return false;
+  let best=DOOR[0],bd=1e9;
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) if(S.grid[y][x]===null){const dd=Math.abs(x-c)+Math.abs(y-r);if(dd<bd){bd=dd;best=[x,y]}}
+  a.x=best[0]+.5;a.y=best[1]+.5;a.path=[];return true;
+}
+function step(a,dt,spd){
+  if(!a.path.length)return true;
+  const [c,r]=a.path[0];
+  if(S.grid[r][c]!==null){a.path=[];return true}
+  const tx=c+.5,ty=r+.5,dx=tx-a.x,dy=ty-a.y,dist=Math.hypot(dx,dy),m=spd*dt;
+  if(dist<=m){a.x=tx;a.y=ty;a.path.shift();return !a.path.length}
+  a.x+=dx/dist*m;a.y+=dy/dist*m;return false;
+}
+function nextTo(a,o){const [c,r]=tileOf(a);return adj(o).some(([x,y])=>x===c&&y===r)}
+
+/* ---------- hackers ---------- */
+function spawnHacker(){
+  let name; const free=HANDLES.filter(n=>!S.names.has(n));
+  name=free.length?pick(free):pick(HANDLES)+'_'+Math.floor(rnd(2,99));
+  S.names.add(name);
+  const [dc,dr]=pick(DOOR);
+  const h={id:nid(),name,x:dc+.5,y:dr+.5,path:[],state:'idle',wait:0,target:null,useT:0,
+    needs:{caffeine:rnd(55,90),hunger:rnd(60,95),energy:rnd(70,100),fun:rnd(55,85)},
+    frust:rnd(0,15),work:rnd(0,30),low:0,shirt:pick(SHIRTS),doing:'Arriving',bob:Math.random()*6,field:pick(Object.keys(FIELDS)),job:null};
+  S.hackers.push(h);
+  return h;
+}
+function happy(h){const n=h.needs;return clamp((n.caffeine+n.hunger+n.energy+n.fun)/4-h.frust*.6)}
+function release(a){if(a.target!=null){const o=objById(a.target);if(o)o.users=Math.max(0,o.users-1)}a.target=null}
+function chooseTarget(h){
+  const [c,r]=tileOf(h); const {d,prev,s}=bfs(c,r);
+  const n=h.needs;
+  const low=Object.entries(n).filter(([,v])=>v<38).sort((a,b)=>a[1]-b[1])[0];
+  let cands=[];
+  if(h.frust>55) cands=S.objs.filter(o=>o.type==='help');
+  if(!cands.length&&low){
+    const k=low[0];
+    cands=k==='fun'?S.objs.filter(o=>o.kind==='pipe'||o.type==='stickers'):S.objs.filter(o=>o.kind==='fac'&&FAC[o.type].need===k);
+    if(!cands.length){h.frust=clamp(h.frust+6);h.unmet=k}
+  }
+  if(!cands.length){
+    cands=Math.random()<.65?S.objs.filter(o=>o.type==='table'):S.objs.filter(o=>o.kind==='pipe');
+    if(!cands.length)cands=S.objs.filter(o=>o.type==='table');
+  }
+  cands=cands.filter(o=>o.users<cap(o));
+  let best=null,bd=1e9,bk=-1;
+  for(const o of cands)for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+Math.random()*3-(o.kind==='pipe'&&PIPES[o.type].field===h.field?4:0);if(sc<bd){bd=sc;best=o;bk=k}}
+  if(best){best.users++;h.target=best.id;h.path=pathFrom(prev,s,bk);h.state='walk';h.doing='Heading to '+objName(best);return}
+  // wander
+  const opts=[];for(let k=0;k<d.length;k++)if(d[k]>0&&d[k]<7)opts.push(k);
+  if(opts.length){const k=pick(opts);h.path=pathFrom(prev,s,k)}
+  h.state='wander';h.doing=low?'Looking for '+({caffeine:'coffee',hunger:'food',energy:'a sit down',fun:'something fun'}[low[0]]):'Wandering about';
+}
+function objName(o){return o.kind==='pipe'?'nf-core/'+o.type:FAC[o.type].label.toLowerCase()}
+function mentorNear(h){return S.staff.some(s=>s.type==='mentor'&&Math.hypot(s.x-h.x,s.y-h.y)<3.2)}
+
+function updHacker(h,dt){
+  const n=h.needs;
+  const dk=dt*(.55+.45*Math.min(diff(),2.2));
+  n.caffeine=clamp(n.caffeine-1.1*dk);n.hunger=clamp(n.hunger-.7*dk);n.energy=clamp(n.energy-.5*dk);n.fun=clamp(n.fun-.75*dk);
+  h.frust=clamp(h.frust-.12*dt);
+  if(S.prs.some(p=>p.author===h.id&&p.age>30+(1-Math.min(diff(),1))*30))h.frust=clamp(h.frust+.5*dt);
+  if(mentorNear(h))h.frust=clamp(h.frust-.3*dt);
+  if(h.state!=='leave'){
+    if(happy(h)<18)h.low+=dt;else h.low=Math.max(0,h.low-dt);
+    if(h.low>12+(1-Math.min(diff(),1))*18){startLeave(h);return}
+  }
+  switch(h.state){
+    case 'idle':
+      h.wait-=dt; if(h.wait<=0)chooseTarget(h); break;
+    case 'wander':
+      if(step(h,dt,2)){h.state='idle';h.wait=rnd(.8,2)} break;
+    case 'walk':{
+      const o=objById(h.target);
+      if(!o){h.target=null;h.state='idle';break}
+      if(step(h,dt,2.4)){
+        if(nextTo(h,o)){h.state='use';h.useT=o.kind==='pipe'?(S.slow>0?10:5):FAC[o.type].dur;h.doing=o.kind==='pipe'?'Running the test profile on '+objName(o):({table:'Writing a module',coffee:'Getting coffee',pizza:'Eating pizza',beanbag:'Resting on a beanbag',stickers:'Collecting stickers',help:'At the help desk'}[o.type])}
+        else{release(h);h.state='idle';h.wait=.3}
+      }
+      break;}
+    case 'use':{
+      const o=objById(h.target);
+      if(!o){h.target=null;h.state='idle';break}
+      h.useT-=dt;
+      if(o.kind==='fac'){
+        const f=FAC[o.type];
+        if(f.need&&!(o.type==='stickers'&&S.noStickers>0))n[f.need]=clamp(n[f.need]+f.gain*dt);
+        if(o.type==='help')h.frust=clamp(h.frust-14*dt);
+        if(o.type==='table'){
+          const rate=(S.noWifi>0?0:.6+2.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
+          h.work+=rate*dt; n.energy=clamp(n.energy-.5*dt);
+          if(h.work>=100){h.work=0;openPR(h)}
+        }
+      }
+      if(h.useT<=0){
+        if(o.kind==='pipe')finishRun(h,o);
+        release(h);h.state='idle';h.wait=.3;
+      }
+      break;}
+    case 'fixwalk':
+      if(!stillBroken(h.job)){claim(h.job,false);h.job=null;h.state='idle';break}
+      if(step(h,dt,2.4)){h.state='fixing';h.useT=fixTime(h.job,h);h.fixT0=h.useT;h.doing=h.job.kind==='task'?jobName(h.job):'Fixing '+jobName(h.job)}
+      break;
+    case 'fixing':
+      if(!stillBroken(h.job)){claim(h.job,false);h.job=null;h.state='idle';break}
+      h.useT-=dt;n.energy=clamp(n.energy-.4*dt);
+      if(h.useT<=0){finishJob(h,'Fixed by @'+h.name);n.fun=clamp(n.fun+10);h.state='idle';h.wait=.5}
+      break;
+    case 'leave':
+      if(step(h,dt,2.6)){S.hackers=S.hackers.filter(x=>x!==h);if(S.sel&&S.sel.t==='h'&&S.sel.id===h.id)S.sel=null}
+      break;
+  }
+}
+function finishRun(h,o){
+  const p=PIPES[o.type];
+  if(o.broken){
+    h.frust=clamp(h.frust+18);h.needs.fun=clamp(h.needs.fun+5);
+    floater(h.x,h.y,'❌ CI red','#FF8A80');
+    if(Math.random()<.2)post('#pipelines',huser(h),pick([`is anyone looking at the red CI on nf-core/${o.type}?`,`nf-core/${o.type} is broken and I have a demo in an hour 😬`,`tried nf-core/${o.type}, got a wall of red`]));
+    return;
+  }
+  const cost=runCost(o);
+  if(S.credits<cost){
+    h.frust=clamp(h.frust+6);floater(h.x,h.y,'no compute','#FF8A80');
+    if(Math.random()<.15)post('#pipelines',huser(h),`nf-core/${o.type} won't launch, we're out of compute credits`);
+    return;
+  }
+  spend('Compute',cost);const pay=runPay(o);earn('Pipeline runs',pay);o.today=(o.today||0)+pay-cost;
+  h.needs.fun=clamp(h.needs.fun+p.fun*(1+.2*(o.level-1))*(p.field===h.field?1.4:1));o.runs++;o.green++;
+  floater(o.c+1,o.r+.3,'+'+(pay-cost),'#FFE08A');
+  const badIn=pMods(o).filter(m=>S.badMods.has(m));
+  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))+S.breakMod+.02*S.drift+.1*badIn.length){
+    if(badIn.length&&Math.random()<.75){const m=pick(badIn);breakPipe(o,`it uses \`${m}\`, which is red`,m)}
+    else breakPipe(o,pick(RED_REASONS));
+  }
+}
+function startLeave(h){
+  release(h);if(h.job){claim(h.job,false);h.job=null}
+  const [c,r]=tileOf(h);const {d,prev,s}=bfs(c,r);
+  let bk=-1,bd=1e9;for(const [x,y] of DOOR){const k=x+y*COLS;if(d[k]>=0&&d[k]<bd){bd=d[k];bk=k}}
+  h.path=bk>=0?pathFrom(prev,s,bk):[];h.state='leave';h.doing='Leaving the hackathon';
+  S.dayLeft++;S.rep=clamp(S.rep-7);
+  const why=h.unmet==='caffeine'?'there is no coffee in this venue. I\'m out ☕':
+    h.unmet==='hunger'?'no food, no pipelines. I\'m going home':
+    S.prs.some(p=>p.author===h.id)?'my PR has been waiting longer than a sarek run. bye':
+    pick(['CI red, morale red. I\'m off','going home to write a shell script out of spite','rage-quitting, see you at the next one maybe','need a nap more than I need nf-core right now']);
+  post('#hackathon',huser(h),why);
+}
+function huser(h){return {name:h.name,av:'🧑‍💻',col:h.shirt}}
+
+/* ---------- PRs and modules ---------- */
+function openPR(h){
+  const pending=new Set(S.prs.map(p=>p.mod));
+  const want=NEEDED.filter(m=>!S.mods.has(m)&&!pending.has(m));
+  // hackers gravitate to whichever unbuilt pipeline is closest to complete
+  const close=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).map(([k,p])=>({p,miss:p.mods.filter(m=>want.includes(m))})).filter(x=>x.miss.length).sort((a,b)=>a.miss.length-b.miss.length||a.p.cost-b.p.cost)[0];
+  const mod=close&&Math.random()<.6?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+  const q=clamp(prQuality(h)+rnd(-.1,.1)+(1-Math.min(diff(),1))*.3,.05,.95);
+  const bad=Math.random()>q;
+  const pr={id:nid(),mod,author:h.id,authorName:h.name,age:0,msg:null,q,bad,notes:makeNotes(bad)};
+  S.prs.push(pr);
+  floater(h.x,h.y-.3,'PR!','#B9F6CA');
+  prMessage(pr,h,false);
+}
+const GOOD_NOTES=['added nf-test snapshots','meta.yml is complete','stub test included','emits versions properly','lint passes locally','followed the module template'];
+const BAD_NOTES=['only tested on my laptop','meta.yml still has a TODO','no stub test yet','hardcoded a container tag','skipped lint, it was slow','copied from another module, mostly'];
+function prQuality(h){const n=h.needs;return clamp(.2+n.caffeine/100*.3+n.energy/100*.2-h.frust/100*.4+(mentorNear(h)?.25:0)-(h.newbie?.15:0),.05,.95)}
+function makeNotes(bad){const g=[...GOOD_NOTES],b=[...BAD_NOTES],out=[];for(let i=0;i<2;i++){const src=Math.random()<(bad?.25:.8)?g:b;out.push(src.splice(Math.floor(Math.random()*src.length),1)[0])}return out}
+function prMessage(pr,h,revised){
+  const isNew=!S.mods.has(pr.mod);
+  const lead=revised?`Addressed the review on \`${pr.mod}\`.`:`Opened a PR: ${isNew?'new module':'update to'} \`${pr.mod}\`.`;
+  const m=post('#modules',huser(h),`${lead} Notes: ${pr.notes.join(', ')}. Could someone review? 🙏`,
+    [{label:'Approve',fn:()=>approvePR(pr.id,false)},{label:'Request changes',fn:()=>requestChanges(pr.id,false)}],{noAuto:true});
+  pr.msg=m.id;
+}
+function approvePR(id,auto){
+  const pr=S.prs.find(p=>p.id===id);if(!pr)return;
+  S.prs=S.prs.filter(p=>p!==pr);
+  const isNew=!S.mods.has(pr.mod);
+  S.mods.add(pr.mod);S.merged++;S.dayMerged++;earn('PR merges',isNew?15:8);
+  const h=S.hackers.find(x=>x.id===pr.author);
+  if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 +15':'✓ +8','#B9F6CA')}
+  resolveMsg(pr.msg,auto?'Approved and merged by a maintainer':'Approved and merged');
+  if(pr.bad)later(rnd(15,40),()=>breakModule(pr.mod,'a bug from a rushed review'));
+  checkUnlocks(false);
+}
+function requestChanges(id,auto){
+  const pr=S.prs.find(p=>p.id===id);if(!pr)return;
+  S.prs=S.prs.filter(p=>p!==pr);
+  const h=S.hackers.find(x=>x.id===pr.author);
+  if(h){
+    if(pr.bad)h.frust=clamp(h.frust+2);
+    else{h.frust=clamp(h.frust+12);floater(h.x,h.y-.3,'😤 it was fine','#FF8A80')}
+  }
+  resolveMsg(pr.msg,auto?'Changes requested by a maintainer':'Changes requested');
+  S.timers.push({t:12,fn:()=>{const a=S.hackers.find(x=>x.id===pr.author);if(!a||a.state==='leave')return;
+    const q=Math.min(.95,pr.q+.35),bad=Math.random()>q;
+    const np={...pr,id:nid(),age:0,q,bad,notes:makeNotes(bad)};S.prs.push(np);
+    prMessage(np,a,true);}});
+}
+function checkUnlocks(silent){
+  for(const [k,p] of Object.entries(PIPES)){
+    if(S.unlocked.has(k))continue;
+    if(p.mods.every(m=>S.mods.has(m))){S.unlocked.add(k);if(!silent)post('#pipelines',BOT,`🔓 All modules for nf-core/${k} are merged. You can build it from the Pipelines tab.`)}
+  }
+}
+
+/* ---------- pipelines ---------- */
+function pMods(o){const p=PIPES[o.type];return [...p.mods,...p.up.slice(0,o.level-1)]}
+function runCost(o){return Math.round(PIPES[o.type].run*(1+.5*(o.level-1)))}
+function commTarget(o){return PIPES[o.type].draw*13*o.level*Math.pow(clamp(S.rep,20,100)/60,1.5)}
+function upCost(o){return Math.round(PIPES[o.type].cost*.6*o.level)}
+function upMod(o){return o.level<3?PIPES[o.type].up[o.level-1]:null}
+function ver(o){return 'v'+o.level+'.0.0'}
+function canUpgrade(o){const m=upMod(o);return !!(o.released&&!o.broken&&m&&S.mods.has(m)&&!S.badMods.has(m)&&S.credits>=upCost(o))}
+const OUTSIDERS=['postdoc_in_paris','core_facility_kat','phd_pedro','lab_manager_li','clinic_bioinf_jo'];
+const ISSUES=['pipeline fails on my data','error after the latest release','is this pipeline still maintained?','same error as an old issue, but different'];
+const ROT_REASONS=['bioconda bumped the tool version','a container tag went missing','an nf-test snapshot changed upstream','upstream renamed an output file'];
+
+function breakPipe(o,reason,badMod){
+  if(o.broken)return;
+  o.broken=true;o.claimed=false;o.badMod=badMod||null;o.green=Math.max(0,o.green-(badMod?6:3));o.issueT=rnd(8,14);
+  const m=post('#pipelines',GH,`❌ CI failed on nf-core/${o.type}: ${reason}.${o.released?' Users are drifting away until it is green.':''}`,fixActions({kind:'pipe',ref:o.id}),{noAuto:true});
+  o.msg=m.id;
+}
+function fixPipe(id,who){
+  const o=objById(id);if(!o||!o.broken)return false;
+  if(o.badMod&&S.badMods.has(o.badMod)){fixModule(o.badMod,who);return true}
+  o.broken=false;o.claimed=false;o.badMod=null;
+  resolveMsg(o.msg,who||'Fixed');o.msg=null;
+  floater(o.c+1,o.r+.5,'✅ green','#B9F6CA');
+  return true;
+}
+function breakModule(m,reason){
+  if(!S.mods.has(m)||S.badMods.has(m))return;
+  S.badMods.add(m);
+  const msg=post('#modules',GH,`❌ Module CI red on \`${m}\`: ${reason}. Pipelines using it can't be built or upgraded, and built ones will go red.`,fixActions({kind:'mod',ref:m}),{noAuto:true});
+  S.modMsg[m]=msg.id;
+  for(const o of S.objs)if(o.kind==='pipe'&&pMods(o).includes(m)&&Math.random()<.6)breakPipe(o,`it uses \`${m}\`, which is red`,m);
+}
+function fixModule(m,who){
+  if(!S.badMods.delete(m))return;
+  S.modClaim.delete(m);
+  resolveMsg(S.modMsg[m],who||'Fixed');delete S.modMsg[m];
+  post('#modules',BOT,`🩹 \`${m}\` is green again.`);
+  for(const o of S.objs)if(o.kind==='pipe'&&o.broken&&o.badMod===m)fixPipe(o.id,who);
+}
+/* fix jobs: a hacker or maintainer has to walk over and spend time */
+function stillBroken(j){if(!j)return false;if(j.kind==='task')return !!S.tasks[j.ref];if(j.kind==='mod')return S.badMods.has(j.ref);const o=objById(j.ref);return !!(o&&o.broken)}
+function claim(j,v){if(!j)return;if(j.kind==='task'){const t=S.tasks[j.ref];if(t)t.claimed=v;return}if(j.kind==='mod'){if(v)S.modClaim.add(j.ref);else S.modClaim.delete(j.ref)}else{const o=objById(j.ref);if(o)o.claimed=v}}
+function jobOpen(j){return stillBroken(j)&&(j.kind==='task'?!S.tasks[j.ref].claimed:j.kind==='mod'?!S.modClaim.has(j.ref):!objById(j.ref).claimed)}
+function jobName(j){if(j.kind==='task')return S.tasks[j.ref]?S.tasks[j.ref].label:'a job';return j.kind==='mod'?'the '+j.ref+' module':'nf-core/'+objById(j.ref).type}
+function sendTo(a,j){
+  const [c,r]=tileOf(a);const {d,prev,s}=bfs(c,r);
+  const ta=j.kind==='task'&&S.tasks[j.ref]&&S.tasks[j.ref].at?objById(S.tasks[j.ref].at):null;
+  const dest=j.kind==='pipe'?[objById(j.ref)]:ta?[ta]:S.objs.filter(o=>o.type==='table');
+  let bk=-1,bd=1e9;
+  for(const o of dest)for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]>=0&&d[k]<bd){bd=d[k];bk=k}}
+  a.path=bk>=0?pathFrom(prev,s,bk):[];
+}
+function fixTime(j,a){if(j.kind==='task')return S.tasks[j.ref].dur;if(j.kind==='mod')return 9;const p=PIPES[objById(j.ref).type];return (8+6*p.upkeep)*(a.field===p.field?.7:1)}
+function assignFix(j){
+  if(!jobOpen(j))return null;
+  const field=j.kind==='pipe'?PIPES[objById(j.ref).type].field:null;
+  const sc=h=>h.needs.energy-h.frust+(h.field===field?30:0);
+  const cands=S.hackers.filter(h=>h.state!=='leave'&&!h.job).sort((a,b)=>sc(b)-sc(a));
+  if(!cands.length)return null;
+  const h=cands[0];release(h);h.job=j;claim(j,true);sendTo(h,j);h.state='fixwalk';h.doing=j.kind==='task'?'On the way: '+jobName(j).toLowerCase():'Walking over to fix '+jobName(j);
+  return h;
+}
+function finishJob(a,who){const j=a.job;a.job=null;if(!j)return;claim(j,false);if(j.kind==='task'){const t=S.tasks[j.ref];delete S.tasks[j.ref];if(t)t.done(a)}else if(j.kind==='mod')fixModule(j.ref,who);else fixPipe(j.ref,who)}
+function fixActions(j){return [
+  {label:'Ask a hacker to fix it',fn:()=>{const h=assignFix(j);if(!h){note(stillBroken(j)?'Nobody is free to fix it right now.':'Already fixed.');return stillBroken(j)?false:'Already fixed'}return 'Asked @'+h.name+' to fix it'}},
+  {label:'Leave it for now',fn:()=>{}}]}
+
+/* the same pattern for Slack chores: a hacker walks off and spends time on it */
+function startTask(label,dur,done,at){
+  const id=nid();S.tasks[id]={label,dur,done,at:at||null,claimed:false};
+  const h=assignFix({kind:'task',ref:id});
+  if(!h){delete S.tasks[id];note('Nobody is free to do that right now.');return false}
+  return 'Asked @'+h.name+': '+label.toLowerCase();
+}
+function fixerOf(j){return [...S.hackers,...S.staff].find(a=>a.job&&a.job.kind===j.kind&&a.job.ref===j.ref)}
+function fixLabel(j){
+  const a=fixerOf(j);if(!a)return null;const who=a.type?'A maintainer':'@'+esc(a.name);
+  if(a.state==='fixing'||a.state==='work'){const left=a.state==='fixing'?a.useT:a.timer;const pct=a.fixT0?Math.max(0,Math.min(90,Math.floor((1-left/a.fixT0)*10)*10)):0;return `🔧 ${who} ${pct}%`}
+  return `🔧 ${who} on the way`;
+}
+function renderCI(){
+  const mods=[...S.mods].sort(),pipes=S.objs.filter(o=>o.kind==='pipe');
+  const redM=mods.filter(m=>S.badMods.has(m)),redP=pipes.filter(o=>o.broken),n=redM.length+redP.length;
+  const lights=`<span class="lights" aria-hidden="true">${pipes.map(o=>`<i class="light pipe ${o.broken?'bad':pMods(o).some(m=>S.badMods.has(m))?'risk':''}" title="nf-core/${o.type}"></i>`).join('')}${mods.map(m=>`<i class="light ${S.badMods.has(m)?'bad':''}" title="${esc(m)}"></i>`).join('')}</span>`;
+  const head=`<div class="ci-head"><b class="px">CI</b>${n?`<b style="color:var(--bad)">${n} red</b>`:'<span style="color:var(--accent)">all green</span>'}${lights}</div>`;
+  const row=(j,name)=>{const f=fixLabel(j);return `<div class="ci-red"><b>❌ ${name}</b>${f?`<span>${f}</span>`:`<button class="btn small" data-act="assign" data-arg="${j.kind}:${j.kind==='mod'?esc(j.ref):j.ref}">Send a hacker</button>`}</div>`};
+  const list=redP.map(o=>row({kind:'pipe',ref:o.id},o.type)).join('')+redM.map(m=>row({kind:'mod',ref:m},esc(m))).join('');
+  const tasks=Object.entries(S.tasks).map(([id,t])=>`<div class="ci-red"><span>📝 ${esc(t.label)}</span><span>${fixLabel({kind:'task',ref:+id})||'waiting'}</span></div>`).join('');
+  setHTML($('#cibar'),'ci',head+list+tasks,false);
+}
+function releasePipe(id){
+  const o=objById(id);if(!o)return;const p=PIPES[o.type];
+  if(o.released||o.broken||o.green<p.rel)return;
+  o.released=true;S.released++;S.stars+=Math.round(p.draw*15);earn('Releases',100);
+  for(const h of S.hackers)h.needs.fun=clamp(h.needs.fun+20);
+  post('#announcements',BOT,`🎉 nf-core/${o.type} v1.0.0 is released! Outside users will start arriving while it stays green.`);
+  floater(o.c+1,o.r,'🚀 v1.0.0','#FFE08A');
+}
+function upgradePipe(id){
+  const o=objById(id);if(!o||!canUpgrade(o))return;
+  spend('Upgrades',upCost(o));o.level++;S.stars+=20*o.level;
+  post('#announcements',BOT,`🚀 nf-core/${o.type} ${ver(o)} is out, now using \`${PIPES[o.type].up[o.level-2]}\`. More users and more samples at once, a bit more to maintain.`);
+  floater(o.c+1,o.r,'🚀 '+ver(o),'#FFE08A');
+}
+function updPipes(dt){
+  for(const o of S.objs){
+    if(o.kind!=='pipe'||!o.released)continue;
+    if(o.broken){
+      o.comm=Math.max(0,o.comm-o.comm*.012*dt);
+      o.issueT-=dt;if(o.issueT<=0){o.issueT=rnd(18,28);post('#pipelines',{name:pick(OUTSIDERS),av:'🌍',col:'#5C7C8A'},`Issue opened on nf-core/${o.type}: "${pick(ISSUES)}"`)}
+    }else o.comm+=(commTarget(o)-o.comm)*.03*dt;
+    const inc=o.comm*.012*dt;earn('Pipeline users',inc);o.today=(o.today||0)+inc;o.uAcc=(o.uAcc||0)+inc;if(o.uAcc>=4){floater(o.c+1,o.r,'👥 +'+Math.round(o.uAcc),'#FFE08A');o.uAcc=0}
+  }
+}
+function perHour(slots,net){return Math.round(slots*net*1.5)}
+function fp(p){return `<span class="fp" aria-label="${p.w} by ${p.h} tiles" style="grid-template-columns:repeat(${p.w},9px)">${'<i></i>'.repeat(p.w*p.h)}</span>`}
+function pipeProfile(k){
+  const p=PIPES[k],lvl=(v,a,b)=>v<=a?'low':v<=b?'med':'high',pay=Math.round(p.run*1.6+2);
+  return `<div class="pills"><span class="pill" title="Samples it can run at once">🧪 ${p.slots}</span><span class="pill" title="Credits an hour when every slot is busy">🪙 +${perHour(p.slots,pay-p.run)}/h</span><span class="pill" title="Upkeep: how often its CI breaks">🔧 ${lvl(p.upkeep,.85,1.15)}</span><span class="pill" title="Outside users once released">👥 ${lvl(p.draw,1.5,2.5)}</span><span class="pill" title="Hackers in this field enjoy it more">${FIELDS[p.field].label}</span></div>`;
+}
+function pipeStatus(o){
+  const p=PIPES[o.type];
+  return `<div class="pills"><span class="pill ${o.broken?'bad':'ok'}">${o.broken?'❌ red':'✅ green'}</span><span class="pill" title="${o.released?'Released version':'Green runs until v1.0.0'}">${o.released?ver(o):`${Math.min(o.green,p.rel)}/${p.rel} to v1`}</span><span class="pill" title="Samples running now">🧪 ${o.users}/${cap(o)}</span><span class="pill" title="Credits an hour when every slot is busy">🪙 +${perHour(cap(o),runPay(o)-runCost(o))}/h</span>${o.released?`<span class="pill" title="Outside users, paying while CI is green">👥 ${Math.round(o.comm)}</span>`:''}<span class="pill" title="Earned today">${sgn(o.today||0)} today</span></div>`;
+}
+function pipeButtons(o){
+  const p=PIPES[o.type];let b='';
+  if(o.broken)b+=o.claimed?`<span class="hint" style="margin:0">${fixLabel({kind:'pipe',ref:o.id})||'Someone is on it'}</span>`:`<button class="btn small primary" data-act="assign" data-arg="pipe:${o.id}">Send a hacker</button>`;
+  else if(!o.released&&o.green>=p.rel)b+=`<button class="btn small primary" data-act="release" data-arg="${o.id}">Release v1.0.0</button>`;
+  if(o.released&&o.level<3)b+=`<button class="btn small" data-act="upgrade" data-arg="${o.id}" title="Needs ${esc(upMod(o))}" ${canUpgrade(o)?'':'disabled'}>Upgrade to v${o.level+1} 🪙${upCost(o)}</button>`;
+  return b;
+}
+
+/* ---------- staff ---------- */
+function hire(type){
+  const cost=type==='maint'?150:120;if(S.credits<cost)return;
+  spend('Hiring',cost);
+  const [dc,dr]=DOOR[0];
+  S.staff.push({id:nid(),type,name:type==='maint'?pick(['maint_mia','maint_omar','maint_ivy','maint_ken']):pick(['mentor_ada','mentor_raj','mentor_lou','mentor_kim']),x:dc+.5,y:dr+.5,path:[],state:'idle',wait:0,target:null,rev:0,timer:0});
+  post('#hackathon',CORE,type==='maint'?'A maintainer has joined. PR reviews and red CI are in good hands.':'A mentor has joined. They will hang around the tables helping people.');
+}
+function updStaff(s,dt){
+  if(s.type==='maint'){s.rev+=dt;if(s.rev>=14&&S.prs.length){s.rev=0;const p=S.prs[0];if(p.bad)requestChanges(p.id,true);else approvePR(p.id,true)}}
+  switch(s.state){
+    case 'idle':{
+      s.wait-=dt;if(s.wait>0)break;
+      if(s.type==='maint'){
+        const m=[...S.badMods].find(x=>!S.modClaim.has(x));
+        const o=S.objs.find(o=>o.kind==='pipe'&&o.broken&&!o.claimed);
+        const job=m?{kind:'mod',ref:m}:o?{kind:'pipe',ref:o.id}:null;
+        if(job){claim(job,true);s.job=job;sendTo(s,job);s.state='walk';break}
+      }
+      const [c,r]=tileOf(s);const {d,prev,s:st}=bfs(c,r);
+      if(s.type==='mentor'){
+        let best=null,bd=1e9,bk=-1;
+        for(const o of S.objs.filter(o=>o.type==='table'))for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+Math.random()*6;if(sc<bd){bd=sc;best=o;bk=k}}
+        if(best){s.target=best.id;s.path=pathFrom(prev,st,bk);s.state='walk';break}
+      }
+      const opts=[];for(let k=0;k<d.length;k++)if(d[k]>0&&d[k]<5)opts.push(k);
+      if(opts.length)s.path=pathFrom(prev,st,pick(opts));s.state='wander';
+      break;}
+    case 'wander':if(step(s,dt,1.8)){s.state='idle';s.wait=rnd(1,3)}break;
+    case 'walk':
+      if(s.job&&!stillBroken(s.job)){claim(s.job,false);s.job=null;s.state='idle';break}
+      if(step(s,dt,2.6)){s.state='work';s.timer=s.job?(s.job.kind==='mod'?4:3+2*PIPES[objById(s.job.ref).type].upkeep):15;s.fixT0=s.timer}
+      break;
+    case 'work':
+      s.timer-=dt;
+      if(s.job){
+        if(!stillBroken(s.job)){claim(s.job,false);s.job=null;s.state='idle';break}
+        if(s.timer<=0){finishJob(s,'Fixed by a maintainer');s.state='idle';s.wait=1}
+      }else if(s.timer<=0){s.target=null;s.state='idle';s.wait=1}
+      break;
+  }
+}
+
+/* ---------- Slack ---------- */
+function clockStr(){const m=Math.floor(9*60+Math.min(S.t,DAY_LEN)/DAY_LEN*720);return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function post(ch,user,text,actions,opts){
+  const m={id:nid(),ch,user,text,actions:actions||null,done:false,choice:null,age:0,time:clockStr(),...(opts||{})};
+  S.slack.unshift(m);if(S.slack.length>80)S.slack.pop();
+  if(S.tab!=='slack')S.unread++;
+  if(actions)showToast(m);
+  return m;
+}
+function resolveMsg(id,choice){const m=S.slack.find(x=>x.id===id);if(m&&!m.done){m.done=true;m.choice=choice}}
+function showToast(m){
+  if(S.tab==='slack')return;
+  const t=$('#toast');t.innerHTML=`<b>${esc(m.ch)}</b> ${md(m.text.length>90?m.text.slice(0,88)+'…':m.text)}`;
+  t.style.display='block';S.toastT=5;
+}
+function note(t){const el=$('#toast');el.textContent=t;el.style.display='block';S.toastT=3}
+function rh(){const a=S.hackers.filter(h=>h.state!=='leave');return a.length?huser(pick(a)):BOT}
+function allH(fn){for(const h of S.hackers)fn(h)}
+
+const tell=(v,a,b)=>Math.random()<.8?(v?a:b):(v?b:a);
+function later(t,fn){S.timers.push({t,fn})}
+function followUp(ch,user,text,t){later(t||rnd(3,6),()=>post(ch,user,text))}
+const NEWCOMER={name:'curious_newcomer',av:'👋',col:'#7FC8F8'};
+function askEvent(){
+  if(S.docsBug===undefined)S.docsBug=Math.random()<.5;
+  const bug=S.docsBug;
+  return {ch:'#help',user:rh(),
+    text:`Another question about the same \`--outdir\` error. ${tell(bug,'They copied the example from the docs exactly.','They skipped the quickstart.')}`,
+    actions:[
+      {label:'Ask a hacker to fix the docs',fn:()=>startTask('Rewriting the docs page',12,()=>{if(bug){S.docsBug=false;S.stars+=5;allH(h=>h.frust=clamp(h.frust-5));post('#help',CORE,'The docs example used an old parameter. Fixed, and the questions stopped.')}else{allH(h=>h.frust=clamp(h.frust+3));post('#help',CORE,'The docs were fine. Meanwhile nobody answered the question.')}})},
+      {label:'Answer in the thread',fn:()=>{allH(h=>h.frust=clamp(h.frust-8));if(bug)later(30,()=>fireE(askEvent))}},
+      {label:'Link the docs',fn:()=>{if(bug){allH(h=>h.frust=clamp(h.frust+10));later(30,()=>fireE(askEvent))}else S.rep=clamp(S.rep+2)}}]};
+}
+const EVENTS=[
+  ()=>{const major=Math.random()<.45;return {ch:'#modules',user:GH,
+    text:`CI on the modules repo is red. Conda cannot solve the environment. The log points to ${tell(major,'a base image bump that hits every env','one niche tool pinned too tightly')}.`,
+    actions:[
+      {label:'Ask a hacker to pin versions',fn:()=>{const r=startTask('Pinning tool versions',12,()=>{S.breakMod=0;S.breakModT=0;post('#modules',GH,major?'Pinned. Good call, that bump would have broken half the repo.':'Pinned. It was only one tool, but CI is green.')});if(r&&major){S.breakMod=.1;S.breakModT=999}return r}},
+      {label:'Ship it anyway',fn:()=>{if(major){S.breakMod=.2;S.breakModT=60;for(let i=0;i<2;i++){const ok=[...S.mods].filter(x=>!S.badMods.has(x));if(ok.length)breakModule(pick(ok),'conda base image bump')}}else{S.breakMod=.03;S.breakModT=30}followUp('#modules',GH,major?'The base image bump is breaking pipelines everywhere for the next minute.':'Only one tool was affected. Barely noticeable.')}}]}},
+  ()=>{const conflict=Math.random()<.5;return {ch:'#pipelines',user:BOT,
+    text:`Template sync PRs just opened on every pipeline. The diff ${tell(conflict,'touches modules.json and every config file','is small, mostly CI config')}.${S.drift?` ${S.drift} earlier sync${S.drift>1?'s are':' is'} still unmerged.`:''}`,
+    actions:[
+      {label:'Merge them all',fn:()=>{S.stars+=10;S.drift=0;let n=0;if(conflict)for(const o of S.objs)if(o.kind==='pipe'&&Math.random()<.6){breakPipe(o,'template sync merge conflict');n++}
+        followUp('#pipelines',BOT,conflict?(n?`Merged. ${n} pipeline${n>1?'s':''} went red with merge conflicts.`:'Merged with conflicts, but no built pipeline was affected.'):'Merged cleanly. Everything is on the latest template.')}},
+      {label:'Leave them for Monday',fn:()=>{S.drift++;allH(h=>h.frust=clamp(h.frust+3));followUp('#pipelines',BOT,`Template drift is now ${S.drift}. Each unmerged sync makes red CI more likely until the next merge.`)}}]}},
+  ()=>{const close=Math.random()<.55;return {ch:'#hackathon',user:VENUE,
+    text:`The pizza delivery is running late. The driver ${tell(close,'says they are two streets away','has stopped answering the phone')}.`,
+    actions:[
+      {label:'Order backup pizza (−60)',cost:60,fn:()=>{allH(h=>h.needs.hunger=clamp(h.needs.hunger+40));followUp('#hackathon',VENUE,close?'The original order turned up five minutes later. Leftovers for breakfast.':'Good call. The original driver went to the wrong venue.')}},
+      {label:'Wait and post a pizza GIF',fn:()=>{allH(h=>{h.needs.hunger=clamp(h.needs.hunger-(close?5:15));h.needs.fun=clamp(h.needs.fun+5)});
+        if(close)later(15,()=>{allH(h=>h.needs.hunger=clamp(h.needs.hunger+40));post('#hackathon',VENUE,'🍕 Pizza is here!')});
+        else later(60,()=>{allH(h=>{h.needs.hunger=clamp(h.needs.hunger+30);h.frust=clamp(h.frust+8)});post('#hackathon',VENUE,'🍕 The pizza finally arrived. Cold.')})}}]}},
+  ()=>{const long=Math.random()<.5;return {ch:'#help',user:rh(),
+    text:`Docker Hub rate limit hit. Every test profile is crawling. ${tell(long,'We pulled 400 images in the last hour.','The limit should reset in a few minutes.')}`,
+    actions:[
+      {label:'Ask a hacker to set up a mirror',fn:()=>{const r=startTask('Setting up a Docker Hub mirror',14,()=>{const was=S.slow>0;S.slow=0;post('#help',CORE,was?'Mirror is up. Test profiles are back to full speed.':'Mirror is up, though the limit had already reset on its own.')});if(r)S.slow=long?70:15;return r}},
+      {label:'Wait it out',fn:()=>{S.slow=long?70:15;later(S.slow,()=>post('#help',CORE,'The rate limit has reset. Test profiles are back to normal speed.'))}}]}},
+  ()=>{const fit=Math.random()<.55;return {ch:'#hackathon',user:CORE,
+    text:`A sponsor offers 200 credits for a 5 minute lightning talk in the main room. Their brief ${tell(fit,'is about running nf-core pipelines on their cloud','mentions "synergy" three times and has no technical content')}.`,
+    actions:[
+      {label:'Ask a hacker to give the talk (+200 when done)',fn:()=>startTask('Preparing a lightning talk',15,()=>{earn('Sponsor talk',200);if(fit){allH(h=>h.needs.fun=clamp(h.needs.fun+10));followUp('#hackathon',CORE,'The talk went down well. People are asking about the cloud credits.')}else{allH(h=>{h.frust=clamp(h.frust+15);h.work=Math.max(0,h.work-30)});S.rep=clamp(S.rep-8);followUp('#random',rh(),'that was 5 minutes of my life I will never get back. Lost my train of thought too')}})},
+      {label:'Too busy',fn:()=>{}}]}},
+  askEvent,
+  ()=>{const real=Math.random()<.5;const pipes=S.objs.filter(o=>o.kind==='pipe');const tgt=pipes.length?pick(pipes):null;const where=tgt?'nf-core/'+tgt.type:'the modules repo';return {ch:'#pipelines',user:BOT,
+    text:`\`nf-core pipelines lint\` found 42 warnings on ${where}. They are ${tell(real,'spread across modules, about missing version outputs','all in one deprecated config file')}.`,
+    actions:[
+      {label:'Ask a hacker to fix them',fn:()=>startTask('Fixing lint warnings',real?16:8,()=>{S.stars+=real?15:5;post('#pipelines',BOT,real?'Fixed 42 real problems.':'They were mostly noise from an old config file. Cleaned up anyway.')},tgt&&tgt.id)},
+      {label:'Silence them in .nf-core.yml',fn:()=>{if(real)later(rnd(20,45),()=>{if(tgt&&objById(tgt.id))breakPipe(tgt,'one of the silenced lint warnings was real');else{S.breakMod=.08;S.breakModT=40;post('#modules',GH,'One of the silenced lint warnings was real. Modules CI is flaky for a while.')}})}}]}},
+  ()=>{const heated=Math.random()<.45;return {ch:'#random',user:rh(),
+    text:`The tabs vs spaces thread now has 87 replies. ${tell(heated,'People are starting to get personal.','It is mostly memes.')}`,
+    actions:[
+      {label:'Weigh in',fn:()=>{if(heated){allH(h=>h.frust=clamp(h.frust+15));followUp('#random',rh(),'you picked a side and now half the room is annoyed with you')}else{allH(h=>h.needs.fun=clamp(h.needs.fun+20));followUp('#random',rh(),'your meme was the best one 😂')}}},
+      {label:'Mute the thread',fn:()=>{if(heated)later(20,()=>{allH(h=>h.frust=clamp(h.frust+6));post('#random',rh(),'the tabs thread is still going and has spilled into #general')})}}]}},
+  ()=>{const few=Math.random()<.5;return {ch:'#hackathon',user:VENUE,
+    text:`Hex sticker supplies are running low. ${tell(few,'There is one box left.','There are still about 20 sheets in the cupboard.')}`,
+    actions:[
+      {label:'Order more (−30)',cost:30,fn:()=>{allH(h=>h.needs.fun=clamp(h.needs.fun+(few?20:5)));if(!few)followUp('#hackathon',VENUE,'Found 20 sheets in the cupboard. We now have a lot of stickers.')}},
+      {label:'Ration them',fn:()=>{if(few){S.noStickers=60;allH(h=>h.needs.fun=clamp(h.needs.fun-15));followUp('#hackathon',VENUE,'The sticker stand is empty for a while.')}else allH(h=>h.needs.fun=clamp(h.needs.fun-3))}}]}},
+  ()=>{const covered=Math.random()<.5;return {ch:'#general',user:NEWCOMER,
+    text:`Is there a pipeline for my data? ${tell(covered,pick(['It is 16S amplicon sequencing.','It is bulk RNA-seq from mouse liver.']),pick(['It is spatial proteomics from a brand new instrument.','It is long-read data from a very unusual organism.']))}`,
+    actions:[
+      {label:'"Come to the hackathon!"',fn:()=>{for(let i=0;i<2;i++){const h=spawnHacker();h.newbie=true;h.needs.fun=covered?30:90}if(!covered)S.stars+=5;followUp('#general',BOT,covered?'They came, then found an existing pipeline already does it. A bit bored now.':'Two keen newcomers arrived with a new use case. Expect some rough first PRs.')}},
+      {label:'Point them to the website',fn:()=>{S.rep=clamp(S.rep+(covered?5:-5));if(!covered)followUp('#general',NEWCOMER,'nothing there does what I need. Oh well')}}]}},
+  ()=>{const long=Math.random()<.5;return {ch:'#hackathon',user:VENUE,
+    text:`The venue Wi-Fi just dropped. ${tell(long,'Venue staff say an engineer can come tomorrow.','The router is rebooting and IT are on it.')}`,
+    actions:[
+      {label:'Phone hotspot (−20)',cost:20,fn:()=>{if(!long)followUp('#hackathon',VENUE,'The router came back two minutes later anyway.')}},
+      {label:'Call it a coffee break',fn:()=>{if(long){S.noWifi=45;allH(h=>h.frust=clamp(h.frust+8));followUp('#hackathon',VENUE,'No Wi-Fi for a while. Nobody can push code.')}else allH(h=>{h.needs.caffeine=clamp(h.needs.caffeine+20);h.needs.fun=clamp(h.needs.fun+5)})}}]}},
+  ()=>{const bad=Math.random()<.5;return {ch:'#modules',user:rh(),
+    text:`Opened one PR that touches 300 modules at once. Notes: ${tell(bad,'regex find and replace, did not run the tests','scripted bump, all module tests pass')}.`,
+    actions:[
+      {label:'Ask a hacker to review it',fn:()=>startTask('Reviewing a 300 module PR',20,()=>{if(bad){S.stars+=5;post('#modules',GH,'The review caught a broken regex in dozens of modules. Sent back, nothing merged.')}else{S.merged+=3;S.dayMerged+=3;S.stars+=10;post('#modules',GH,'Thorough review, clean PR. Merged.')}})},
+      {label:'LGTM 👍',fn:()=>{S.merged+=3;S.dayMerged+=3;if(bad){const owned=NEEDED.filter(m=>S.mods.has(m)&&!S.badMods.has(m));for(let i=0;i<2&&owned.length;i++){const m=owned.splice(Math.floor(Math.random()*owned.length),1)[0];later(rnd(15,40),()=>breakModule(m,'a bug from the 300 module PR'))}}}}]}}
+];
+function fireE(fn){const e=fn();const m=post(e.ch,e.user,e.text,e.actions);m.auto=e.actions.length-1}
+function prog(){return S.day-1+Math.min(S.t,DAY_LEN)/DAY_LEN}
+function diff(){const p=prog();return p<1.75?.3+.04*p:.37+(p-1.75)*0.3+Math.max(0,p-4.5)**2*0.07}
+const EVENT_TIER=[1,2,0,1,0,0,2,0,0,0,1,2];
+const TIER_NOTES={1:'Late tomorrow things start to pick up: conda trouble, Docker Hub limits, flaky Wi-Fi, and modules breaking upstream.',2:'From tomorrow: template syncs, lint sweeps and enormous PRs. It keeps getting busier from here.'};
+function fireEvent(){const p=prog();fireE(pick(EVENTS.filter((e,i)=>[0,1.75,2.4][EVENT_TIER[i]]<=p)))}
+const HAPPY=['just got my first green CI tick 🥹','TIL `-resume` can save an entire afternoon','`nf-core pipelines lint` passed first time. Is this a dream?','anyone want to pair on a stub test?','meta maps finally clicked for me','nf-test snapshots updated, all green 🟢','who knew a tuple could cause so many feelings','the hex stickers are going fast, get yours','my first module got merged and I am telling my mum'];
+const COMPLAIN={caffeine:'the coffee queue is longer than my sarek run ☕',hunger:'is the pizza a myth?',energy:'I need a beanbag and a nap',fun:'bored. Anyone got a pipeline that needs testing?'};
+function chatter(){
+  const live=S.hackers.filter(h=>h.state!=='leave');if(!live.length)return;
+  const h=pick(live);const low=Object.entries(h.needs).sort((a,b)=>a[1]-b[1])[0];
+  post(pick(['#hackathon','#random','#general']),huser(h),low[1]<40?COMPLAIN[low[0]]:pick(HAPPY));
+}
+
+/* ---------- loop ---------- */
+function maxH(){const t=S.objs.filter(o=>o.type==='table').length,p=S.objs.filter(o=>o.kind==='pipe').length;return Math.min(30,6+t*2+p*2,Math.floor(capH()))}
+function capH(){const q=prog();return q<2?6+1.25*q:8.5+3*(q-2)}
+function avgHap(){const a=S.hackers.filter(h=>h.state!=='leave');return a.length?a.reduce((s,h)=>s+happy(h),0)/a.length:0}
+function update(dt){
+  S.t+=dt;
+  for(const tm of S.timers)tm.t-=dt;
+  const due=S.timers.filter(t=>t.t<=0);S.timers=S.timers.filter(t=>t.t>0);due.forEach(t=>t.fn());
+  S.slow=Math.max(0,S.slow-dt);S.noStickers=Math.max(0,S.noStickers-dt);S.noWifi=Math.max(0,S.noWifi-dt);
+  if(S.breakModT>0){S.breakModT-=dt;if(S.breakModT<=0)S.breakMod=0}
+  if(S.t<DAY_LEN*.75){S.spawnT-=dt;if(S.spawnT<=0){if(S.hackers.length<maxH()&&S.rep>=20)spawnHacker();S.spawnT=Math.max(3.5,15-S.rep/9)/(.5+.5*Math.min(diff(),1))}}
+  for(const h of [...S.hackers])updHacker(h,dt);
+  for(const s of S.staff)updStaff(s,dt);
+  updPipes(dt);
+  S.rotT-=prog()<1.75?0:dt;if(S.rotT<=0){S.rotT=rnd(60,100)/Math.max(diff(),.45);const ok=[...S.mods].filter(m=>NEEDED.includes(m)&&!S.badMods.has(m));if(ok.length>2)breakModule(pick(ok),pick(ROT_REASONS))}
+  for(const p of S.prs)p.age+=dt;
+  for(const m of S.slack){if(m.actions&&!m.done&&!m.noAuto){m.age+=dt;if(m.age>45){const a=m.actions[m.auto];a.fn();m.done=true;m.choice=a.label+' (nobody answered in time)'}}}
+  if(S.t<DAY_LEN*.95){
+    S.nextEvent-=dt;if(S.nextEvent<=0){fireEvent();S.nextEvent=rnd(24,40)/Math.max(diff(),.45)}
+    S.nextChat-=dt;if(S.nextChat<=0){chatter();S.nextChat=rnd(9,18)}
+  }
+  const a=avgHap();S.rep+=(repTarget(a)-S.rep)*.02*dt;S.hapSum+=a*dt;S.hapN+=dt;
+  for(const f of S.floaters)f.life-=dt;S.floaters=S.floaters.filter(f=>f.life>0);
+  checkLose(dt);if(S.over)return;
+  if(S.t>=DAY_LEN)endDay();
+}
+function nowT(){return prog()*DAY_LEN}
+function earn(src,a){S.credits+=a;S.today[src]=(S.today[src]||0)+a;S.recent.push([nowT(),a]);if(Math.abs(a)>=10){S.log.unshift([clockStr(),src,a]);if(S.log.length>8)S.log.length=8}}
+function spend(src,a){earn(src,-a)}
+function rate(){const t=nowT();S.recent=S.recent.filter(r=>t-r[0]<25);return S.recent.reduce((s,r)=>s+r[1],0)/25*(DAY_LEN/12)}
+function sgn(v){return (v>=0?'+':'−')+Math.round(Math.abs(v))}
+function rateStr(){return sgn(rate())+'/h'}
+function runPay(o){return Math.round((PIPES[o.type].run*1.6+2)*(1+.6*(o.level-1))*(o.released?1.25:1))}
+function ledgerRows(){return Object.entries(S.today).filter(([,v])=>Math.abs(v)>=.5).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span>${k}</span><b style="color:${v>=0?'var(--accent)':'var(--bad)'}">${sgn(v)}</b>`).join('')}
+function ledgerCard(){
+  const net=Object.values(S.today).reduce((a,b)=>a+b,0),pipes=S.objs.filter(o=>o.kind==='pipe');
+  return `<div class="card"><h3>🪙 Credits today<span class="cost">${rateStr()} right now</span></h3>
+  <div class="score">${ledgerRows()||'<span>Nothing yet today</span><b></b>'}<span class="tot">Net today</span><b class="tot">${sgn(net)}</b></div>
+  ${pipes.length?`<p class="hint" style="margin:0 0 6px">By pipeline: ${pipes.map(o=>`nf-core/${o.type} ${sgn(o.today||0)}`).join(', ')}.</p>`:''}
+  ${S.log.length?`<p class="hint" style="margin:0">Recent</p><div class="score">${S.log.map(([t,s,a])=>`<span>${t} ${s}</span><b style="color:${a>=0?'var(--accent)':'var(--bad)'}">${sgn(a)}</b>`).join('')}</div>`:''}
+  <button class="btn small" data-act="desel">Close</button></div>`;
+}
+function floater(x,y,text,col){S.floaters.push({x,y,text,col,life:1.6});if(S.floaters.length>30)S.floaters.shift()}
+
+/* ---------- days ---------- */
+function endDay(){
+  S.paused=true;
+  const staffCost=S.staff.length*40, grant=Math.max(50,200-15*S.dayLeft);
+  earn('Sponsor grant',grant);if(staffCost)spend('Salaries',staffCost);
+  if(S.credits<0)S.debtDays++;else S.debtDays=0;
+  if(S.debtDays>=2){lose('bankrupt');return}
+  const sc=score();let best=0;
+  try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(sc>best){localStorage.setItem('nfcore-hackathon-best',sc);best=sc}}catch(e){best=Math.max(best,sc)}
+  const nu=TIER_NOTES[S.day]||'Tomorrow will be a little busier again.';
+  showModal(`<h2 class="px">Day ${S.day} wrapped</h2>
+    <div class="score"><span>Modules merged today</span><b>${S.dayMerged}</b>
+    <span>Hackers who left unhappy (each cuts the grant by 15)</span><b>${S.dayLeft}</b></div>
+    <div class="score">${ledgerRows()}<span class="tot">Net today</span><b class="tot">${sgn(Object.values(S.today).reduce((a,b)=>a+b,0))}</b>
+    <span>Credits now</span><b>${Math.round(S.credits)}</b></div>
+    <div class="score"><span>Running score</span><b>${sc}</b><span>Best score</span><b>${best}</b></div>
+    ${S.debtDays?'<p style="color:var(--bad)"><b>You ended the day in debt. If you are still below zero at the end of tomorrow, the hackathon goes bankrupt.</b></p>':''}
+    <p>${nu}</p>
+    <p>Everyone heads to the pub, sleeps, and comes back tomorrow with refilled batteries.</p>
+    <button class="btn primary" data-act="nextday">Start day ${S.day+1}</button>`);
+}
+function nextDay(){
+  S.day++;S.t=0;S.dayMerged=0;S.dayLeft=0;S.dayUsers=0;S.dayCompute=0;S.today={};for(const o of S.objs)o.today=0;S.spawnT=2;S.nextEvent=20;
+  for(const h of S.hackers){h.needs={caffeine:rnd(50,70),hunger:rnd(70,90),energy:rnd(85,100),fun:rnd(60,80)};h.frust*=.5;h.low=0}
+  post('#hackathon',BOT,`Good morning and welcome to day ${S.day}! ☀️`);
+  hideModal();S.paused=false;
+}
+function score(){
+  const hap=S.hapN?S.hapSum/S.hapN:0;
+  return S.merged*10+S.released*150+S.stars+Math.round(hap*3)+Math.round(Math.max(0,S.credits)/10)+Math.round(S.objs.reduce((t,o)=>t+(o.comm||0),0));
+}
+/* ---------- losing ---------- */
+const MELT_LIMIT=60,EMPTY_LIMIT=40,REP_FLOOR=30,REP_DAYS=.6;
+const LOSE={
+  bankrupt:['Bankrupt','You ended two days in a row in debt, and the sponsors pulled out.'],
+  rep:['Cancelled','Reputation stayed critical for too long, so the core team called the hackathon off.'],
+  melt:['CI meltdown','Every pipeline and a pile of modules stayed red for too long. The core team pulled the plug.'],
+  empty:['Empty venue','Everyone went home and nobody new turned up.']};
+/* reputation drifts towards average happiness, minus slow reviews and red CI */
+function repTarget(a){const old=S.prs.filter(p=>p.age>60).length,pipes=S.objs.filter(o=>o.kind==='pipe'),red=pipes.length?pipes.filter(o=>o.broken).length/pipes.length:0;return a-Math.min(30,old*4)-red*30-Math.min(20,S.badMods.size*2)}
+function checkLose(dt){
+  if(S.rep<REP_FLOOR){S.lowRepT+=dt;if(!S.warn.rep){S.warn.rep=1;post('#hackathon',CORE,'⚠ Reputation is critical. If it stays this low, we will have to cancel the hackathon.')}}
+  else{S.lowRepT=Math.max(0,S.lowRepT-0.5*dt);if(!S.lowRepT)S.warn.rep=0}
+  const pipes=S.objs.filter(o=>o.kind==='pipe');
+  if(pipes.length&&pipes.every(o=>o.broken)&&S.badMods.size>=3){S.meltT+=dt;if(!S.warn.melt){S.warn.melt=1;post('#pipelines',CORE,'⚠ CI meltdown: every pipeline and several modules are red. Get something green within a few hours or we call it off.')}}
+  else{S.meltT=0;S.warn.melt=0}
+  const live=S.hackers.filter(h=>h.state!=='leave').length;
+  if(live===0&&S.t<DAY_LEN*.75)S.emptyT+=dt;else if(live)S.emptyT=0;
+  if(S.day<2)return;
+  if(S.lowRepT>=DAY_LEN*REP_DAYS)lose('rep');
+  else if(S.meltT>=MELT_LIMIT)lose('melt');
+  else if(S.emptyT>=EMPTY_LIMIT)lose('empty');
+}
+function dangerChips(){
+  const hr=DAY_LEN/12;let h='';
+  if(S.credits<0)h+=`<span class="stat danger" title="End the day below zero twice in a row and you go bankrupt">💸 Debt${S.debtDays?', last chance':''}</span>`;
+  if(S.lowRepT>0)h+=`<span class="stat danger" title="Reputation is critical. Raise it before the hackathon is cancelled.">📉 ${Math.max(1,Math.ceil((DAY_LEN*REP_DAYS-S.lowRepT)/hr))}h</span>`;
+  if(S.meltT>0)h+=`<span class="stat danger" title="CI meltdown. Get something green.">🔥 ${Math.max(1,Math.ceil((MELT_LIMIT-S.meltT)/hr))}h</span>`;
+  if(S.emptyT>0)h+=`<span class="stat danger" title="Nobody is here${S.rep<20?', and nobody new will come':''}">🚪 Empty</span>`;
+  return h;
+}
+function lose(r){if(S.over)return;S.paused=true;endGame(r)}
+function endGame(reason){
+  S.over=true;
+  const hap=S.hapN?S.hapSum/S.hapN:0;
+  const parts=[['Modules merged',S.merged,S.merged*10],['Pipelines released',S.released,S.released*150],['GitHub stars',S.stars,S.stars],['Average happiness',Math.round(hap)+'%',Math.round(hap*3)],['Credits left',Math.round(S.credits),Math.round(Math.max(0,S.credits)/10)]];
+  const total=parts.reduce((s,p)=>s+p[2],0);
+  let best=0;try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(total>best)localStorage.setItem('nfcore-hackathon-best',total)}catch(e){}
+  const [title,why]=LOSE[reason]||['Hackathon over',''];
+  showModal(`<h2 class="px">${title}</h2><p>${why} You lasted until day ${S.day}, ${clockStr()}.</p>
+    <div class="score">${parts.map(p=>`<span>${p[0]} (${p[1]})</span><b>${p[2]}</b>`).join('')}
+    <span class="tot">Score</span><b class="tot">${total}</b></div>
+    <p>${total>best?'New best score.':'Best score: '+best}</p>
+    <button class="btn primary" data-act="again">Run another hackathon</button>`);
+}
+function showModal(html){const o=$('#overlay');o.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${html}</div>`;o.style.display='flex';const b=o.querySelector('button');if(b)b.focus()}
+function hideModal(){$('#overlay').style.display='none'}
+function intro(){
+  showModal(`<h2 class="px">Hackathon Tycoon</h2>
+  <p>Run an nf-core hackathon for as long as you can.</p>
+  <ul>
+    <li>Hackers write modules at 💻 tables. Review their PRs in Slack: rushed ones break CI later.</li>
+    <li>Merge a pipeline's modules, then build it. Green runs pay, and bigger pipelines pay more.</li>
+    <li>Red CI needs a person. Send a hacker, or hire a maintainer.</li>
+    <li>Keep everyone fed, caffeinated and happy. It starts calm and gets chaotic. Red warnings up top mean you're close to losing.</li>
+  </ul>
+  <button class="btn primary" data-act="start">Start the hackathon</button>`);
+}
+
+/* ---------- drawing ---------- */
+function resize(){
+  const wrap=$('#mapwrap');const w=Math.min(wrap.clientWidth-6,560);
+  T=Math.max(22,Math.floor(w/COLS));
+  canvas.width=T*COLS*DPR;canvas.height=T*ROWS*DPR;
+  canvas.style.width=T*COLS+'px';canvas.style.height=T*ROWS+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+function emoji(e,x,y,size){ctx.font=`${size}px ${EMOJI}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(e,x,y)}
+function moodCol(v){return v>60?'#5BE38A':v>35?'#FFC94D':'#FF5A4F'}
+function draw(now){
+  ctx.clearRect(0,0,COLS*T,ROWS*T);
+  // conference carpet
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    ctx.fillStyle=(c+r)%2?'#3F5D78':'#46667F';ctx.fillRect(c*T,r*T,T,T);
+    ctx.fillStyle='rgba(255,214,120,.13)';const cx=c*T+T/2,cy=r*T+T/2,s=T*.14;
+    ctx.beginPath();ctx.moveTo(cx,cy-s);ctx.lineTo(cx+s,cy);ctx.lineTo(cx,cy+s);ctx.lineTo(cx-s,cy);ctx.fill();
+  }
+  // door
+  ctx.fillStyle='#2A3B2F';ctx.fillRect(DOOR[0][0]*T,(ROWS-1)*T+T*.55,T*2,T*.45);
+  ctx.fillStyle='#E9F5EC';ctx.font=`${Math.floor(T*.3)}px ${PXF}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('entrance',(DOOR[0][0]+1)*T,(ROWS-1)*T+T*.78);
+  // objects
+  for(const o of S.objs){
+    const x=o.c*T,y=o.r*T,w=o.w*T,h=o.h*T,ins=T*.07;
+    const sel=S.sel&&S.sel.t==='o'&&S.sel.id===o.id;
+    if(o.kind==='fac'){
+      const f=FAC[o.type];
+      ctx.fillStyle='rgba(0,0,0,.25)';rr(x+ins+2,y+ins+3,w-ins*2,h-ins*2,5);ctx.fill();
+      ctx.fillStyle=f.col;rr(x+ins,y+ins,w-ins*2,h-ins*2,5);ctx.fill();
+      emoji(f.icon,x+w/2,y+h/2,Math.floor(T*.55));
+      for(let i=0;i<o.users;i++){ctx.fillStyle='#FFE08A';ctx.fillRect(x+ins+3+i*5,y+h-ins-5,3,3)}
+    }else{
+      const p=PIPES[o.type];
+      ctx.fillStyle='rgba(0,0,0,.3)';rr(x+ins+3,y+ins+4,w-ins*2,h-ins*2,7);ctx.fill();
+      ctx.fillStyle=p.col;rr(x+ins,y+ins,w-ins*2,h-ins*2,7);ctx.fill();
+      const band=Math.min(h*.3,T*.34);
+      ctx.fillStyle='rgba(0,0,0,.28)';rr(x+ins,y+ins,w-ins*2,band,7);ctx.fill();
+      // striped awning, the theme park bit
+      ctx.save();rr(x+ins,y+ins,w-ins*2,band,7);ctx.clip();ctx.fillStyle='rgba(255,255,255,.22)';
+      for(let sx=x;sx<x+w;sx+=T*.36)ctx.fillRect(sx,y,T*.18,band+ins);ctx.restore();
+      let fs=Math.floor(Math.min(T*.32,band*.85));ctx.font=`700 ${fs}px ${PXF}`;
+      while(ctx.measureText(o.type).width>w-ins*2-6&&fs>7){fs--;ctx.font=`700 ${fs}px ${PXF}`}
+      ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.type,x+w/2,y+ins+band/2);
+      const body=h-band-ins*2;emoji(p.icon,x+w/2,y+ins+band+body/2,Math.floor(Math.min(T*.7,body*.85)));
+      const risk=!o.broken&&pMods(o).some(m=>S.badMods.has(m));
+      if(o.broken){
+        ctx.fillStyle='rgba(20,20,20,.45)';rr(x+ins,y+ins,w-ins*2,h-ins*2,7);ctx.fill();
+        ctx.strokeStyle=Math.floor(now/400)%2?'#FF5A4F':'#7A1F1A';ctx.lineWidth=3;rr(x+ins+1,y+ins+1,w-ins*2-2,h-ins*2-2,7);ctx.stroke();
+        ctx.fillStyle='#FF5A4F';rr(x+w/2-T*.6,y+h*.5-T*.2,T*1.2,T*.4,4);ctx.fill();
+        ctx.font='700 '+Math.floor(T*.26)+'px '+PXF;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.claimed?'fixing':'CI red',x+w/2,y+h*.5);
+      }
+      ctx.fillStyle=o.broken?'#FF5A4F':risk?'#FFC94D':'#5BE38A';rr(x+w-ins-T*.44,y+h-ins-T*.44,T*.38,T*.38,4);ctx.fill();
+      ctx.strokeStyle='#14231A';ctx.lineWidth=2;ctx.stroke();
+      ctx.font='700 '+Math.floor(T*.28)+'px "Courier New",monospace';ctx.fillStyle='#14231A';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(o.broken?'✗':risk?'!':'✓',x+w-ins-T*.25,y+h-ins-T*.24);
+      if(o.released){emoji('⭐',x+ins+T*.25,y+h-ins-T*.25,Math.floor(T*.38));if(o.level>1){ctx.font='700 '+Math.floor(T*.28)+'px '+PXF;ctx.fillStyle='#fff';ctx.textAlign='left';ctx.fillText('v'+o.level,x+ins+T*.48,y+h-ins-T*.25)}}
+      else{ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(x+ins+4,y+h-ins-7,w-ins*2-T*.6,4);ctx.fillStyle='#FFE08A';ctx.fillRect(x+ins+4,y+h-ins-7,(w-ins*2-T*.6)*Math.min(1,o.green/p.rel),4)}
+    }
+    if(sel){ctx.strokeStyle='#FFF';ctx.lineWidth=3;ctx.setLineDash([5,4]);rr(x+1,y+1,w-2,h-2,6);ctx.stroke();ctx.setLineDash([])}
+  }
+  // ghost
+  if(S.mode&&S.hover){
+    const [w,h]=modeSize();const [c,r]=fitOrigin(S.hover[0],S.hover[1],w,h);
+    const ok=canPlace(c,r,w,h)&&S.credits>=modeCost();
+    ctx.fillStyle=ok?'rgba(91,227,138,.4)':'rgba(255,90,79,.4)';ctx.fillRect(c*T,r*T,w*T,h*T);
+    ctx.strokeStyle=ok?'#5BE38A':'#FF5A4F';ctx.lineWidth=2;ctx.strokeRect(c*T+1,r*T+1,w*T-2,h*T-2);
+  }
+  // agents
+  const agents=[...S.hackers.map(h=>({a:h,k:'h'})),...S.staff.map(s=>({a:s,k:'s'}))].sort((p,q)=>p.a.y-q.a.y);
+  for(const {a,k} of agents){
+    const moving=a.path&&a.path.length;const bob=moving?Math.sin(now/90+(a.bob||0))*T*.04:0;
+    const x=a.x*T,y=a.y*T+bob;
+    ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(x,a.y*T+T*.28,T*.2,T*.07,0,0,7);ctx.fill();
+    if(k==='h'){
+      const hp=happy(a);
+      ctx.fillStyle=a.shirt;ctx.beginPath();ctx.arc(x,y+T*.08,T*.2,0,7);ctx.fill();
+      ctx.strokeStyle=moodCol(hp);ctx.lineWidth=2.5;ctx.stroke();
+      ctx.fillStyle='#F1C9A5';ctx.beginPath();ctx.arc(x,y-T*.16,T*.12,0,7);ctx.fill();
+      if(a.state==='use'){const o=objById(a.target);if(o&&o.type==='table'){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(x-T*.25,y-T*.48,T*.5,4);ctx.fillStyle='#5BE38A';ctx.fillRect(x-T*.25,y-T*.48,T*.5*a.work/100,4)}}
+      if(a.state==='fixing'){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(x-T*.25,y-T*.48,T*.5,4);ctx.fillStyle='#FFB74D';ctx.fillRect(x-T*.25,y-T*.48,T*.5*(1-a.useT/a.fixT0),4)}
+      let b=null;
+      if(a.state==='leave')b='😤';else if(a.state==='fixwalk'||a.state==='fixing')b='🔧';else if(a.frust>55)b='😩';else{const low=Object.entries(a.needs).sort((p,q)=>p[1]-q[1])[0];if(low[1]<30)b={caffeine:'☕',hunger:'🍕',energy:'😴',fun:'🥱'}[low[0]]}
+      if(b){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+T*.24,y-T*.42,T*.19,0,7);ctx.fill();emoji(b,x+T*.24,y-T*.41,Math.floor(T*.26))}
+      if(S.sel&&S.sel.t==='h'&&S.sel.id===a.id){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,T*.42,0,7);ctx.stroke()}
+    }else{
+      ctx.fillStyle=a.type==='maint'?'#6B3FA0':'#D4A017';
+      rr(x-T*.2,y-T*.12,T*.4,T*.4,4);ctx.fill();ctx.strokeStyle='#14231A';ctx.lineWidth=2;ctx.stroke();
+      ctx.fillStyle='#F1C9A5';ctx.beginPath();ctx.arc(x,y-T*.2,T*.12,0,7);ctx.fill();
+      emoji(a.type==='maint'?'🔧':'🎓',x,y+T*.08,Math.floor(T*.24));
+      if(a.state==='work'&&a.type==='maint')emoji('⚙️',x+T*.26,y-T*.4,Math.floor(T*.26));
+    }
+  }
+  // floaters
+  for(const f of S.floaters){
+    const al=Math.min(1,f.life);ctx.globalAlpha=al;
+    ctx.font=`700 ${Math.floor(T*.34)}px ${PXF}`;ctx.textAlign='center';ctx.textBaseline='middle';
+    const fy=(f.y-(1.6-f.life)*.8)*T;
+    ctx.lineWidth=3;ctx.strokeStyle='#14231A';ctx.strokeText(f.text,f.x*T,fy);ctx.fillStyle=f.col;ctx.fillText(f.text,f.x*T,fy);
+    ctx.globalAlpha=1;
+  }
+  if(S.paused&&!S.over&&$('#overlay').style.display!=='flex'){
+    ctx.fillStyle='rgba(10,20,15,.45)';ctx.fillRect(0,0,COLS*T,ROWS*T);
+    ctx.font=`700 ${Math.floor(T*.7)}px ${PXF}`;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText('paused',COLS*T/2,ROWS*T/2);
+  }
+}
+function fitOrigin(c,r,w,h){return [Math.min(c,COLS-w),Math.min(r,ROWS-(h||w))]}
+function modeSize(){if(!S.mode||S.mode.kind!=='pipe')return [1,1];const p=PIPES[S.mode.type];return S.mode.rot?[p.h,p.w]:[p.w,p.h]}
+function modeCost(){return S.mode?(S.mode.kind==='pipe'?PIPES[S.mode.type].cost:FAC[S.mode.type].cost):0}
+
+/* ---------- input ---------- */
+function tileAt(e){const b=canvas.getBoundingClientRect();return [(e.clientX-b.left)/T,(e.clientY-b.top)/T]}
+canvas.addEventListener('pointermove',e=>{const [x,y]=tileAt(e);S.hover=[Math.floor(x),Math.floor(y)]});
+canvas.addEventListener('pointerleave',()=>{S.hover=null});
+canvas.addEventListener('click',e=>{
+  if(S.over)return;
+  const [fx,fy]=tileAt(e);const c=Math.floor(fx),r=Math.floor(fy);if(!inb(c,r))return;
+  if(S.mode){
+    const [w,h]=modeSize();const [oc,or]=fitOrigin(c,r,w,h);S.hover=[c,r];
+    const cost=modeCost();
+    if(S.credits<cost){flash('Not enough credits');return}
+    if(!canPlace(oc,or,w,h)){flash('Cannot build there. Keep walkways open.');return}
+    spend('Building',cost);const o=addObj(S.mode.kind,S.mode.type,oc,or,S.mode.rot);
+    for(const a of [...S.hackers,...S.staff]){if(unstick(a)){release(a);if(a.job){claim(a.job,false);a.job=null}a.state='idle'}}
+    if(o.kind==='pipe'){post('#pipelines',BOT,`🎢 nf-core/${o.type} is open. Come and run the test profile!`);S.mode=null;S.sel={t:'o',id:o.id}}
+    return;
+  }
+  let hit=null,hd=.5;
+  for(const a of S.hackers){const d=Math.hypot(a.x-fx,a.y-.15-fy);if(d<hd){hd=d;hit=a}}
+  if(hit){S.sel={t:'h',id:hit.id};renderInspect(true);return}
+  const id=S.grid[r][c];
+  S.sel=id!=null?{t:'o',id}:null;renderInspect(true);
+});
+function flash(t){const el=$('#modetext');if(el&&S.mode){const prev=el.textContent;el.textContent=t;setTimeout(()=>updateModebar(),1400)}}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b||b.disabled)return;
+  const act=b.dataset.act,arg=b.dataset.arg;
+  switch(act){
+    case 'start':hideModal();S.paused=false;break;
+    case 'nextday':nextDay();break;
+    case 'again':newGame();hideModal();S.paused=false;renderPanel(true);break;
+    case 'speed':{const n=+arg;if(n===0)S.paused=true;else{S.paused=false;S.speed=n}break}
+    case 'tab':S.tab=arg;if(arg==='slack'){S.unread=0;$('#toast').style.display='none'}renderPanel(true);break;
+    case 'build':S.mode=(S.mode&&S.mode.type===arg)?null:{kind:'fac',type:arg};break;
+    case 'buildpipe':S.mode={kind:'pipe',type:arg,rot:false};S.sel=null;break;
+    case 'rotate':if(S.mode&&S.mode.kind==='pipe')S.mode.rot=!S.mode.rot;break;
+    case 'cancel':S.mode=null;break;
+    case 'sl':{const [mid,i]=arg.split(':').map(Number);const m=S.slack.find(x=>x.id===mid);if(!m||m.done)break;const a=m.actions[i];if(a.cost){if(S.credits<a.cost)break;spend('Slack purchases',a.cost)}
+      const res=a.fn();if(res===false){if(a.cost)earn('Slack purchases',a.cost);break}
+      if(!m.done){m.done=true;m.choice=typeof res==='string'?res:a.label}
+      break;}
+    case 'assign':{const [k,r]=arg.split(':');const j={kind:k,ref:k==='pipe'?+r:r};if(!stillBroken(j))break;if(!assignFix(j))note('Nobody is free to fix it right now.');break}
+    case 'upgrade':upgradePipe(+arg);break;
+    case 'release':releasePipe(+arg);break;
+    case 'remove':{const o=objById(+arg);if(o){earn('Refunds',Math.floor((o.kind==='pipe'?PIPES[o.type].cost:FAC[o.type].cost)/2));removeObj(o);S.sel=null}break}
+    case 'hire':hire(arg);break;
+    case 'ledger':S.sel=S.sel&&S.sel.t==='ledger'?null:{t:'ledger'};break;
+    case 'desel':S.sel=null;break;
+  }
+  updateHUD();updateModebar();renderPanel(true);renderInspect(true);renderCI();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){S.mode=null;S.sel=null;updateModebar();renderInspect(true)}if((e.key==='r'||e.key==='R')&&S.mode&&S.mode.kind==='pipe'){S.mode.rot=!S.mode.rot;updateModebar()}});
+
+/* ---------- UI ---------- */
+const lastHTML={};
+function setHTML(el,key,html,force){if(force||lastHTML[key]!==html){lastHTML[key]=html;el.innerHTML=html}}
+function updateHUD(){
+  const m=Math.floor(9*60+Math.min(S.t,DAY_LEN)/DAY_LEN*720);
+  $('#clock').textContent=`Day ${S.day}, ${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const a=avgHap();const face=a>65?'😄':a>45?'🙂':a>25?'😐':'😠';
+  const owned=NEEDED.filter(x=>S.mods.has(x)).length;
+  const fx=[[S.noWifi>0,'📶','Wi-Fi is down: nobody can write modules'],[S.slow>0,'🐢','Docker Hub rate limit: runs are slow'],[S.noStickers>0,'🏷️','Out of stickers'],[S.breakMod>0,'🔥','CI is unstable'],[S.drift>0,'🧭','Template drift: '+S.drift+' unmerged syncs']].filter(f=>f[0]).map(f=>`<span class="stat" title="${f[2]}">${f[1]}</span>`).join('');
+  setHTML($('#stats'),'stats',
+    `<button class="stat" data-act="ledger" title="Credits. Tap to see where they come from.">🪙 <b class="px">${Math.round(S.credits)}</b> <small style="color:${rate()>=0?'var(--accent)':'var(--bad)'}">${rateStr()}</small></button>
+     <span class="stat" title="Average happiness">${face} <b class="px">${Math.round(a)}%</b></span>
+     <span class="stat${S.rep<40?' danger':''}" title="Reputation. Drops with unhappy hackers, slow reviews, red CI and people leaving. Below ${REP_FLOOR} for too long and the hackathon is cancelled. Below 20 and nobody new arrives.">📣 <b class="px">${Math.round(S.rep)}</b></span>
+     <span class="stat" title="Hackers here">🧑‍💻 <b class="px">${S.hackers.filter(h=>h.state!=='leave').length}</b></span>
+     <span class="stat" title="GitHub stars">⭐ <b class="px">${S.stars}</b></span>${fx}${dangerChips()}`);
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.arg===S.tab));
+  const bd=$('#badge');if(S.unread>0&&S.tab!=='slack'){bd.hidden=false;bd.textContent=S.unread>9?'9+':S.unread}else bd.hidden=true;
+  if(S.toastT>0){S.toastT-=.35;if(S.toastT<=0)$('#toast').style.display='none'}
+  updateModebar();
+}
+function updateModebar(){
+  const mb=$('#modebar');
+  if(!S.mode){mb.style.display='none';return}
+  mb.style.display='flex';
+  const name=S.mode.kind==='pipe'?'nf-core/'+S.mode.type:FAC[S.mode.type].label;
+  const [mw,mh]=modeSize();$('#rotbtn').hidden=!(S.mode.kind==='pipe'&&mw!==mh);
+  $('#modetext').textContent=S.mode.kind==='pipe'?`Placing ${name}, ${mw}×${mh} (🪙${modeCost()}). Tap the floor.`:`Placing ${name} (🪙${modeCost()}). Tap the floor.`;
+}
+function renderPanel(force){
+  const p=$('#panel');let html='';
+  const chip=m=>`<span class="chip ${S.mods.has(m)?'ok':''}${S.badMods.has(m)?' bad':''}" title="${S.badMods.has(m)?'Red CI':S.mods.has(m)?'Merged':'Not merged yet'}">${esc(m)}</span>`;
+  if(S.tab==='build'){
+    html=`<div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><small>🪙${f.cost}</small></button>`).join('')+`</div>`;
+  }else if(S.tab==='pipes'){
+    html=Object.entries(PIPES).map(([k,pp])=>{
+      const built=S.objs.find(o=>o.kind==='pipe'&&o.type===k);
+      const ups=pp.up.map((m,i)=>`<span class="hint" style="margin:0 0 0 6px">v${i+2}</span>${chip(m)}`).join('');
+      let body;
+      if(built)body=`${pipeStatus(built)}<div class="chips">${pp.mods.map(chip).join('')}${ups}</div><div class="row">${pipeButtons(built)}</div>`;
+      else{const owned=pp.mods.every(m=>S.mods.has(m)),ready=owned&&!pp.mods.some(m=>S.badMods.has(m));
+        body=`${pipeProfile(k)}<div class="chips">${pp.mods.map(chip).join('')}</div><div class="row"><button class="btn small ${ready?'primary':''}" data-act="buildpipe" data-arg="${k}" ${!ready||S.credits<pp.cost?'disabled':''}>${ready?'Build':owned?'Module CI red':'Needs modules'}</button></div>`}
+      return `<div class="card"><h3><span>${pp.icon}</span>${k}${fp(pp)}<span class="cost">🪙${pp.cost}</span></h3>${body}</div>`;
+    }).join('');
+  }else if(S.tab==='slack'){
+    html=S.slack.map(m=>{
+      let acts='';
+      if(m.actions&&!m.done)acts=`<div class="row">${m.actions.map((a,i)=>`<button class="btn small ${i===0?'primary':''}" data-act="sl" data-arg="${m.id}:${i}" ${a.cost&&S.credits<a.cost?'disabled':''}>${esc(a.label)}</button>`).join('')}</div>`;
+      else if(m.done)acts=`<div class="choice">✓ ${esc(m.choice)}</div>`;
+      return `<article class="msg ${m.actions&&!m.done?'live':''}"><div class="av" style="background:${m.user.col}">${m.user.av}</div><div><div class="meta"><b>${esc(m.user.name)}</b><span class="ch">${esc(m.ch)}</span><span class="tm">${m.time}</span></div><p>${md(m.text)}</p>${acts}</div></article>`;
+    }).join('')||'<p class="hint">Quiet for now.</p>';
+  }else{
+    const maint=S.staff.filter(s=>s.type==='maint').length,ment=S.staff.filter(s=>s.type==='mentor').length;
+    const staff=(icon,name,cost,n,tags,arg)=>`<div class="card"><h3>${icon} ${name}<span class="cost">🪙${cost}</span></h3><div class="pills">${tags.map(t=>`<span class="pill">${t}</span>`).join('')}<span class="pill">40/day</span>${n?`<span class="pill ok">${n} hired</span>`:''}</div><button class="btn small" data-act="hire" data-arg="${arg}" ${S.credits<cost?'disabled':''}>Hire</button></div>`;
+    html=staff('🔧','Maintainer',150,maint,['Reviews PRs','Spots rushed ones','Fixes red CI'],'maint')+staff('🎓','Mentor',120,ment,['Faster modules nearby','Calmer hackers'],'mentor')+
+      `<div class="lib"><h4>Modules (${S.mods.size})</h4><div class="chips">${ALL_MODS.map(chip).join('')}</div></div>`;
+  }
+  setHTML(p,'panel',html,false);
+  lastHTML.tab!==S.tab&&(lastHTML.tab=S.tab,p.scrollTop=0);
+}
+function bar(label,v,col){return `<span>${label}</span><div class="bar"><i style="width:${Math.round(v)}%;background:${col}"></i></div><span>${Math.round(v)}</span>`}
+function renderInspect(force){
+  const el=$('#inspect');let html='';
+  if(S.sel){
+    if(S.sel.t==='ledger'){html=ledgerCard()}else if(S.sel.t==='h'){
+      const h=S.hackers.find(x=>x.id===S.sel.id);
+      if(!h){S.sel=null}else{
+        const n=h.needs,hp=happy(h);
+        html=`<div class="card"><h3>🧑‍💻 @${esc(h.name)}<span class="cost">${hp>60?'😄':hp>35?'😐':'😠'} ${Math.round(hp)}%</span></h3>
+        <div class="hint" style="margin:0">${FIELDS[h.field].label} hacker${h.newbie?', first hackathon':''}. ${esc(h.doing)}</div>
+        <div class="bars">${bar('Caffeine',n.caffeine,'#8D6E63')}${bar('Hunger',n.hunger,'#F28C28')}${bar('Energy',n.energy,'#5C9BD6')}${bar('Fun',n.fun,'#D45E8A')}${bar('Frustration',h.frust,'#C23A2F')}${bar('Module progress',h.work,'#1F9D5B')}${bar('PR quality',prQuality(h)*100,'#7E57C2')}</div>
+        <button class="btn small" data-act="desel">Close</button></div>`;
+      }
+    }else{
+      const o=objById(S.sel.id);
+      if(!o){S.sel=null}else if(o.kind==='fac'){
+        const f=FAC[o.type];
+        html=`<div class="card"><h3>${f.icon} ${f.label}<span class="cost">In use ${o.users}/${f.cap}</span></h3><p class="hint">${f.desc}</p><div class="row"><button class="btn small" data-act="remove" data-arg="${o.id}">Remove (refund ${Math.floor(f.cost/2)})</button><button class="btn small" data-act="desel">Close</button></div></div>`;
+      }else{
+        const p=PIPES[o.type];
+        html=`<div class="card"><h3>${p.icon} nf-core/${o.type}<span class="cost">${FIELDS[p.field].label}</span></h3>
+        ${pipeStatus(o)}
+        <div class="row">${pipeButtons(o)}<button class="btn small" data-act="remove" data-arg="${o.id}">Remove</button><button class="btn small" data-act="desel">Close</button></div></div>`;
+      }
+    }
+  }
+  setHTML(el,'inspect',html,false);
+}
+
+/* ---------- boot ---------- */
+let last=performance.now(),uiT=0;
+function loop(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  if(!S.paused&&!S.over){let g=dt*S.speed;while(g>0){const s=Math.min(.05,g);update(s);g-=s;if(S.paused)break}}
+  draw(now);
+  uiT+=dt;if(uiT>.35){uiT=0;updateHUD();renderPanel(false);renderInspect(false);renderCI()}
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize',resize);
+newGame();resize();updateHUD();renderPanel(true);renderCI();intro();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
