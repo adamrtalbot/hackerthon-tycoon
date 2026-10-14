@@ -13,7 +13,7 @@ Open `index.html` in a browser. No build step or dependencies.
 
 ## Controls
 
-- `R`: rotate a pipe while placing it
+- `R`: rotate a pipeline while placing it
 - `Esc`: cancel the current action
 
 Your best score is saved in `localStorage`.
