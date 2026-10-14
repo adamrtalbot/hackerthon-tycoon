@@ -409,7 +409,7 @@ function finishRun(h,o){
   h.needs.fun=clamp(h.needs.fun+p.fun*(1+.2*(o.level-1))*(p.field===h.field?1.4:1));o.runs++;o.green+=fullOn(o)?2:1;
   floater(o.c+1,o.r+.3,'+'+(pay-cost),'#FFE08A');
   const badIn=pMods(o).filter(m=>S.badMods.has(m));
-  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))+S.breakMod+.02*S.drift+.1*badIn.length){
+  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))*(fullOn(o)?1.5:1)+S.breakMod+.02*S.drift+.1*badIn.length){
     if(badIn.length&&Math.random()<.75){const m=pick(badIn);breakPipe(o,`it uses \`${m}\`, which is red`,m)}
     else breakPipe(o,pick(RED_REASONS));
   }
@@ -591,9 +591,15 @@ function upgradePipe(id){
   post('#announcements',BOT,`🚀 nf-core/${o.type} ${ver(o)} is out, now using \`${PIPES[o.type].up[o.level-2]}\`. More users and more samples at once, a bit more to maintain.`);
   floater(o.c+1,o.r,'🚀 '+ver(o),'#FFE08A');
 }
+const CI_BURN=2.5;
+function ciPerHour(o){return CI_BURN*PIPES[o.type].upkeep*(1+.25*(o.level-1))*(o.broken?2:1)}
 function updPipes(dt){
   for(const o of S.objs){
-    if(o.kind!=='pipe'||!o.released)continue;
+    if(o.kind!=='pipe')continue;
+    // every built pipeline burns CI minutes, red ones re-run and burn double
+    o.ciAcc=(o.ciAcc||0)+ciPerHour(o)*dt/(DAY_LEN/12);
+    if(o.ciAcc>=1){const c=Math.floor(o.ciAcc);o.ciAcc-=c;spend('CI minutes',c);o.today=(o.today||0)-c}
+    if(!o.released)continue;
     if(o.broken){
       o.comm=Math.max(0,o.comm-o.comm*.012*dt);
       o.issueT-=dt;if(o.issueT<=0){o.issueT=rnd(18,28);post('#pipelines',{name:pick(OUTSIDERS),av:'🌍',col:'#5C7C8A'},`Issue opened on nf-core/${o.type}: "${pick(ISSUES)}"`)}
@@ -605,17 +611,17 @@ function perHour(slots,net){return sgn(slots*net*1.5)}
 function fp(p){return `<span class="fp" aria-label="${p.w} by ${p.h} tiles" style="grid-template-columns:repeat(${p.w},9px)">${'<i></i>'.repeat(p.w*p.h)}</span>`}
 function pipeProfile(k){
   const p=PIPES[k],lvl=(v,a,b)=>v<=a?'low':v<=b?'med':'high';
-  return `<div class="pills"><span class="pill" title="Samples it can run at once">🧪 ${p.slots}</span><span class="pill" title="Credits an hour from test runs before v1.0.0, then after release">🪙 ${perHour(p.slots,payOf(k,1,false)-p.run)} → ${perHour(p.slots,payOf(k,1,true)-p.run)}/h</span><span class="pill" title="Upkeep: how often its CI breaks">🔧 ${lvl(p.upkeep,.85,1.15)}</span><span class="pill" title="Outside users once released">👥 ${lvl(p.draw,1.5,2.5)}</span><span class="pill" title="Hackers in this field enjoy it more">${FIELDS[p.field].label}</span></div>`;
+  return `<div class="pills"><span class="pill" title="Samples it can run at once">🧪 ${p.slots}</span><span class="pill" title="Credits an hour from test runs before v1.0.0, then after release">🪙 ${perHour(p.slots,payOf(k,1,false)-p.run)} → ${perHour(p.slots,payOf(k,1,true)-p.run)}/h</span><span class="pill" title="CI minutes it burns every hour once built, and how often its CI breaks">🔧 −${Math.round(CI_BURN*p.upkeep)}/h, ${lvl(p.upkeep,.85,1.15)}</span><span class="pill" title="Outside users once released">👥 ${lvl(p.draw,1.5,2.5)}</span><span class="pill" title="Hackers in this field enjoy it more">${FIELDS[p.field].label}</span></div>`;
 }
 function pipeStatus(o){
   const p=PIPES[o.type];
-  return `<div class="pills"><span class="pill ${o.broken?'bad':'ok'}">${o.broken?'❌ red':'✅ green'}</span><span class="pill" title="${o.released?'Released version':'Green runs until v1.0.0'}">${o.released?ver(o):`${Math.min(o.green,p.rel)}/${p.rel} to v1`}</span><span class="pill" title="Samples running now">🧪 ${o.users}/${cap(o)}</span><span class="pill" title="Credits an hour when every slot is busy${o.released?'':'. Runs only pay properly after v1.0.0'}">🪙 ${perHour(cap(o),runPay(o)-runCost(o))}/h</span>${o.released?`<span class="pill" title="Outside users, paying while CI is green">👥 ${Math.round(o.comm)}</span>`:''}<span class="pill" title="Earned today">${sgn(o.today||0)} today</span></div>`;
+  return `<div class="pills"><span class="pill ${o.broken?'bad':'ok'}">${o.broken?'❌ red':'✅ green'}</span><span class="pill" title="${o.released?'Released version':'Green runs until v1.0.0'}">${o.released?ver(o):`${Math.min(o.green,p.rel)}/${p.rel} to v1`}</span><span class="pill" title="Samples running now">🧪 ${o.users}/${cap(o)}</span><span class="pill" title="Credits an hour when every slot is busy${o.released?'':'. Runs only pay properly after v1.0.0'}">🪙 ${perHour(cap(o),runPay(o)-runCost(o))}/h</span><span class="pill" title="CI minutes burned every hour${o.broken?', doubled while red':''}">🔧 −${Math.round(ciPerHour(o))}/h</span>${o.released?`<span class="pill" title="Outside users, paying while CI is green">👥 ${Math.round(o.comm)}</span>`:''}<span class="pill" title="Earned today">${sgn(o.today||0)} today</span></div>`;
 }
 function pipeButtons(o){
   const p=PIPES[o.type];let b='';
   if(o.broken)b+=o.claimed?`<span class="hint" style="margin:0">${fixLabel({kind:'pipe',ref:o.id})||'Someone is on it'}</span>`:`<button class="btn small primary" data-act="assign" data-arg="pipe:${o.id}">Send a hacker</button>`;
   else if(!o.released&&o.green>=p.rel)b+=`<button class="btn small primary" data-act="release" data-arg="${o.id}">Release v1.0.0</button>`;
-  if(!o.released&&o.green<p.rel)b+=`<button class="btn small" data-act="profile" data-arg="${o.id}" aria-pressed="${!!o.full}" title="test_full: 3× compute per run, counts as 2 green runs. Gets to v1.0.0 sooner, costs more.">-profile ${o.full?'test_full':'test'}</button>`;
+  if(!o.released&&o.green<p.rel)b+=`<button class="btn small" data-act="profile" data-arg="${o.id}" aria-pressed="${!!o.full}" title="test_full: 3× compute per run, counts as 2 green runs, breaks CI more often. Gets to v1.0.0 sooner, costs more.">-profile ${o.full?'test_full':'test'}</button>`;
   if(o.released&&o.level<3)b+=`<button class="btn small" data-act="upgrade" data-arg="${o.id}" title="Needs ${esc(upMod(o))}" ${canUpgrade(o)?'':'disabled'}>Upgrade to v${o.level+1} 🪙${upCost(o)}</button>`;
   return b;
 }
@@ -809,7 +815,7 @@ function rate(){const t=nowT();S.recent=S.recent.filter(r=>t-r[0]<25);return S.r
 function sgn(v){return (v>=0?'+':'−')+Math.round(Math.abs(v))}
 function rateStr(){return sgn(rate())+'/h'}
 function payOf(k,level,released){return Math.round((PIPES[k].run*1.6+2)*(1+.6*(level-1))*(released?1.25:.4))}
-function runPay(o){return payOf(o.type,o.level,o.released)*(fullOn(o)?3:1)}
+function runPay(o){return payOf(o.type,o.level,o.released)*(fullOn(o)?2:1)}
 function ledgerRows(){return Object.entries(S.today).filter(([,v])=>Math.abs(v)>=.5).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span>${k}</span><b style="color:${v>=0?'var(--accent)':'var(--bad)'}">${sgn(v)}</b>`).join('')}
 function ledgerCard(){
   const net=Object.values(S.today).reduce((a,b)=>a+b,0),pipes=S.objs.filter(o=>o.kind==='pipe');
@@ -903,7 +909,7 @@ function intro(){
   <p>Run an nf-core hackathon for as long as you can.</p>
   <ul>
     <li>Hackers write modules at 💻 tables. Review their PRs in Slack: rushed ones break CI later.</li>
-    <li>Merge a pipeline's modules, then build it. Test runs burn compute credits until you release v1.0.0. After that, runs and outside users pay.</li>
+    <li>Merge a pipeline's modules, then build it. Each built pipeline burns CI minutes, and test runs cost compute until you release v1.0.0. After that, runs and outside users pay.</li>
     <li>Red CI needs a person. Send a hacker, or hire a maintainer. Failed runs still burn compute.</li>
     <li>Keep everyone fed, caffeinated and happy. The sponsor grant each night follows your reputation.</li>
     <li>Don't build everything at once. End two days in a row in debt and the hackathon is over.</li>
