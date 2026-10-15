@@ -18,3 +18,14 @@ Open `index.html` in a browser. No build step or dependencies.
 - `Esc`: cancel the current action
 
 Your best score is saved in `localStorage`.
+
+## Balance testing
+
+`sim/` has a headless bot for checking balance changes. It needs [uv](https://docs.astral.sh/uv/) and a Playwright Chromium (`uvx playwright install chromium`).
+
+```sh
+uv run sim/sim.py good 8 4   # policy, days, runs
+uv run sim/ui.py             # screenshots of every panel in sim/shots/
+```
+
+Policies: `good` plays carefully, `build` builds every pipeline as fast as it can, `rush` also approves every PR and hires staff, `idle` does nothing. Each snapshot line shows day, time, credits, hackers, happiness, reputation, pipelines (`*` released, `!` red), modules, red modules and score, followed by that day's ledger.
