@@ -10,7 +10,7 @@ A browser game where you run an nf-core hackathon for as long as you can.
 
 ## Play
 
-Open `index.html` in a browser. No build step or dependencies.
+Play online at <https://adamrtalbot.github.io/hackerthon-tycoon/>, or open `index.html` in a browser. No build step or dependencies.
 
 ## Controls
 
