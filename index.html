@@ -1336,13 +1336,14 @@ function mapClick(fx,fy){
   const id=S.grid[r][c];
   S.sel=id!=null?{t:'o',id}:null;renderInspect(true);
 }
-function flash(t){const el=$('#modetext');if(el&&S.mode){const prev=el.textContent;el.textContent=t;setTimeout(()=>updateModebar(),1400)}}
+function flash(text){if(S.mode&&!replaying)S.mode.feedback={text,until:performance.now()+1400}}
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b||b.disabled)return;
   if(b.dataset.act==='again'){newGame();gameAction('start');return}
   gameAction(b.dataset.act,b.dataset.arg||'');
 });
 function gameAction(act,arg=''){
+  if(S.mode)delete S.mode.feedback;
   if(!replaying)replay.commands.push({step:replay.steps,act,arg});
   switch(act){
     case 'start':hideModal();S.paused=false;break;
@@ -1412,7 +1413,8 @@ function updateModebar(){
   mb.style.display='flex';
   const name=S.mode.kind==='pipe'?'nf-core/'+S.mode.type:FAC[S.mode.type].label;
   const [mw,mh]=modeSize();$('#rotbtn').hidden=!(S.mode.kind==='pipe'&&mw!==mh);
-  $('#modetext').textContent=S.mode.kind==='pipe'?`Placing ${name}, ${mw}×${mh} (🪙${modeCost()}). Tap the floor.`:`Placing ${name} (🪙${modeCost()}). Tap the floor.`;
+  $('#modetext').textContent=S.mode.feedback?.until>performance.now()?S.mode.feedback.text:
+    S.mode.kind==='pipe'?`Placing ${name}, ${mw}×${mh} (🪙${modeCost()}). Tap the floor.`:`Placing ${name} (🪙${modeCost()}). Tap the floor.`;
 }
 function renderPanel(force){
   const p=$('#panel');let html='';

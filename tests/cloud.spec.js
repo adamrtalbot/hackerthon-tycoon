@@ -189,3 +189,19 @@ test('changing recovery identity in another tab blocks writes until explicitly r
   expect(board.entries.some(entry => entry.name === 'blocked-score')).toBe(false);
   await second.close();
 });
+
+test('placement feedback survives HUD refreshes and clears for the next placement', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { gameAction('start');gameAction('speed','0'); });
+  await page.getByRole('button', { name: /Pizza table/ }).click();
+  const tile = await page.evaluate(() => T);
+  await page.locator('#map').click({ position: { x: 3.5 * tile, y: 8.5 * tile } });
+  await expect(page.locator('#modetext')).toHaveText('Cannot build there. Keep walkways open.');
+  // The HUD refreshes every 350ms; the error must outlast those refreshes.
+  await page.waitForTimeout(600);
+  await expect(page.locator('#modetext')).toHaveText('Cannot build there. Keep walkways open.');
+  await expect(page.locator('#modetext')).toContainText('Placing Pizza table');
+  await page.locator('#map').click({ position: { x: 2.5 * tile, y: 4.5 * tile } });
+  await expect(page.locator('#modetext')).toContainText('Placing Pizza table');
+  expect(await page.evaluate(() => S.objs.filter(o => o.type === 'pizza').length)).toBe(1);
+});
