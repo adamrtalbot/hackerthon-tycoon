@@ -111,7 +111,7 @@ button.stat:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .meta .ch{color:var(--slack);font-weight:700}
 .meta .tm{color:var(--muted)}
 .msg p{margin:2px 0 6px;overflow-wrap:anywhere}
-.msg code{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:13px}
+.msg code,.hint code{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:13px}
 .choice{font-size:13px;color:var(--muted)}
 .bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:13px;margin:6px 0}
 .bar{height:10px;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;background:var(--panel)}
@@ -218,7 +218,7 @@ function newGame(){
     breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],debtDays:0,lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
     names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0};
   addObj('fac','table',3,8); addObj('fac','table',8,8); addObj('fac','coffee',5,4);
-  for(let i=0;i<4;i++) spawnHacker();
+  for(let i=0;i<4;i++) spawnHacker().work=rnd(40,75);
   post('#hackathon',BOT,'Welcome to the nf-core hackathon! 🎉 Grab a table, write some modules, ship some pipelines.');
   checkUnlocks(true);
   S.unread=0;
@@ -366,7 +366,7 @@ function updHacker(h,dt){
         if(f.need&&!(o.type==='stickers'&&S.noStickers>0))n[f.need]=clamp(n[f.need]+f.gain*dt);
         if(o.type==='help')h.frust=clamp(h.frust-14*dt);
         if(o.type==='table'){
-          const rate=(S.noWifi>0?0:.6+2.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
+          const rate=(S.noWifi>0?0:2.2+1.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
           h.work+=rate*dt; n.energy=clamp(n.energy-.5*dt);
           if(h.work>=100){h.work=0;openPR(h)}
         }
@@ -434,7 +434,7 @@ function openPR(h){
   const want=NEEDED.filter(m=>!S.mods.has(m)&&!pending.has(m));
   // hackers gravitate to whichever unbuilt pipeline is closest to complete
   const close=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).map(([k,p])=>({p,miss:p.mods.filter(m=>want.includes(m))})).filter(x=>x.miss.length).sort((a,b)=>a.miss.length-b.miss.length||a.p.cost-b.p.cost)[0];
-  const mod=close&&Math.random()<.6?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+  const mod=close&&(!S.unlocked.size||Math.random()<.6)?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
   const q=clamp(prQuality(h)+rnd(-.1,.1)+(1-Math.min(diff(),1))*.3,.05,.95);
   const bad=Math.random()>q;
   const pr={id:nid(),mod,author:h.id,authorName:h.name,age:0,msg:null,q,bad,notes:makeNotes(bad)};
@@ -457,9 +457,9 @@ function approvePR(id,auto){
   const pr=S.prs.find(p=>p.id===id);if(!pr)return;
   S.prs=S.prs.filter(p=>p!==pr);
   const isNew=!S.mods.has(pr.mod);
-  S.mods.add(pr.mod);S.merged++;S.dayMerged++;S.stars+=isNew?3:1;
+  S.mods.add(pr.mod);S.merged++;S.dayMerged++;S.stars+=isNew?3:1;if(isNew)earn('Module bounties',10);
   const h=S.hackers.find(x=>x.id===pr.author);
-  if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 ⭐+3':'✓ ⭐+1','#B9F6CA')}
+  if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 +10':'✓ ⭐+1','#B9F6CA')}
   resolveMsg(pr.msg,auto?'Approved and merged by a maintainer':'Approved and merged');
   if(pr.bad)later(rnd(15,40),()=>breakModule(pr.mod,'a bug from a rushed review'));
   checkUnlocks(false);
@@ -1120,7 +1120,7 @@ function renderPanel(force){
   const p=$('#panel');let html='';
   const chip=m=>`<span class="chip ${S.mods.has(m)?'ok':''}${S.badMods.has(m)?' bad':''}" title="${S.badMods.has(m)?'Red CI':S.mods.has(m)?'Merged':'Not merged yet'}">${esc(m)}</span>`;
   if(S.tab==='build'){
-    html=`<div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><small>🪙${f.cost}</small></button>`).join('')+`</div>`;
+    html=`<p class="hint">${goalHint()}</p><div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><small>🪙${f.cost}</small></button>`).join('')+`</div>`;
   }else if(S.tab==='pipes'){
     html=Object.entries(PIPES).map(([k,pp])=>{
       const built=S.objs.find(o=>o.kind==='pipe'&&o.type===k);
@@ -1146,6 +1146,14 @@ function renderPanel(force){
   }
   setHTML(p,'panel',html,false);
   lastHTML.tab!==S.tab&&(lastHTML.tab=S.tab,p.scrollTop=0);
+}
+/* nudge towards the next pipeline so new players save for it */
+function goalHint(){
+  const next=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).sort((a,b)=>a[1].mods.filter(m=>!S.mods.has(m)).length-b[1].mods.filter(m=>!S.mods.has(m)).length||a[1].cost-b[1].cost)[0];
+  if(!next)return 'Every pipeline is built. Keep them green and release them.';
+  const [k,p]=next,miss=p.mods.filter(m=>!S.mods.has(m)),short=p.cost-Math.round(S.credits);
+  if(miss.length)return `🎯 Next: nf-core/${k} needs ${miss.map(m=>`<code>${esc(m)}</code>`).join(', ')}. Keep 🪙${p.cost} spare to build it.`;
+  return short>0?`🎯 nf-core/${k} is ready. You need ${short} more credits to build it.`:`🎯 nf-core/${k} is ready to build in the Pipelines tab (🪙${p.cost}).`;
 }
 function bar(label,v,col){return `<span>${label}</span><div class="bar"><i style="width:${Math.round(v)}%;background:${col}"></i></div><span>${Math.round(v)}</span>`}
 function renderInspect(force){
