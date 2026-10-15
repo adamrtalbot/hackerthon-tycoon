@@ -161,6 +161,10 @@ button.kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .score{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:8px 0 14px}
 .score .tot{font-weight:700;border-top:2px solid var(--ink);padding-top:4px}
 .lib h4{margin:10px 0 4px;font-size:14px}
+.hk-h{margin:14px 0 8px;font-size:14px}
+.card.hk{margin:0}
+.card.hk .hint{margin:0 0 6px}
+.card.hk.locked{opacity:.7}
 @media (prefers-reduced-motion:reduce){.btn:active:not(:disabled){transform:none}.light.bad{animation:none}}
 </style>
 </head>
@@ -251,7 +255,8 @@ function newGame(){
     objs:[],hackers:[],staff:[],mods:new Set(['fastqc','multiqc']),prs:[],slack:[],unread:0,
     rep:60,mode:null,sel:null,tab:'build',nextId:1,spawnT:3,nextEvent:45,nextChat:7,
     breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],debtDays:0,lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
-    names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0};
+    names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0,
+    hu:new Set(),hk:{},claudeOn:false,bribeT:0,hidden:0,prodBill:0,rustP:null,rustDone:false,swarmLoop:0,tokAcc:0,loopT:30};
   addObj('fac','table',3,8); addObj('fac','table',8,8); addObj('fac','coffee',5,4);
   for(let i=0;i<4;i++) spawnHacker().work=rnd(40,75);
   post('#hackathon',BOT,'Welcome to the nf-core hackathon! 🎉 Grab a table, write some modules, ship some pipelines.');
@@ -388,7 +393,7 @@ function updHacker(h,dt){
       const o=objById(h.target);
       if(!o){h.target=null;h.state='idle';break}
       if(step(h,dt,2.4)){
-        if(nextTo(h,o)){h.state='use';h.useT=o.kind==='pipe'?(S.slow>0?10:5):FAC[o.type].dur;h.doing=o.kind==='pipe'?'Running the test profile on '+objName(o):({table:'Writing a module',coffee:'Getting coffee',pizza:'Eating pizza',beanbag:'Resting on a beanbag',stickers:'Collecting stickers',help:'At the help desk'}[o.type])}
+        if(nextTo(h,o)){h.state='use';h.useT=o.kind==='pipe'?(S.slow>0?10:5)/(S.rustDone?3:1):FAC[o.type].dur;h.doing=o.kind==='pipe'?'Running the test profile on '+objName(o):({table:'Writing a module',coffee:'Getting coffee',pizza:'Eating pizza',beanbag:'Resting on a beanbag',stickers:'Collecting stickers',help:'At the help desk'}[o.type])}
         else{release(h);h.state='idle';h.wait=.3}
       }
       break;}
@@ -401,7 +406,7 @@ function updHacker(h,dt){
         if(f.need&&!(o.type==='stickers'&&S.noStickers>0))n[f.need]=clamp(n[f.need]+f.gain*dt);
         if(o.type==='help')h.frust=clamp(h.frust-14*dt);
         if(o.type==='table'){
-          const rate=(S.noWifi>0?0:2.2+1.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
+          const rate=(S.noWifi>0?0:2.2+1.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1)*(S.claudeOn?2:1)*(S.rustP!=null?.5:1);
           h.work+=rate*dt; n.energy=clamp(n.energy-.5*dt);
           if(h.work>=100){h.work=0;openPR(h)}
         }
@@ -464,18 +469,22 @@ function startLeave(h){
 function huser(h){return {name:h.name,av:'🧑‍💻',col:h.shirt}}
 
 /* ---------- PRs and modules ---------- */
-function openPR(h){
+function pickMod(){
   const pending=new Set(S.prs.map(p=>p.mod));
   const want=NEEDED.filter(m=>!S.mods.has(m)&&!pending.has(m));
   // hackers gravitate to whichever unbuilt pipeline is closest to complete
   const close=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).map(([k,p])=>({p,miss:p.mods.filter(m=>want.includes(m))})).filter(x=>x.miss.length).sort((a,b)=>a.miss.length-b.miss.length||a.p.cost-b.p.cost)[0];
-  const mod=close&&(!S.unlocked.size||Math.random()<.6)?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+  return close&&(!S.unlocked.size||Math.random()<.6)?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+}
+function openPR(h){
+  const mod=pickMod();
   const q=clamp(prQuality(h)+rnd(-.1,.1)+(1-Math.min(diff(),1))*.3,.05,.95);
   const bad=Math.random()>q;
   const pr={id:nid(),mod,author:h.id,authorName:h.name,age:0,msg:null,q,bad,notes:makeNotes(bad)};
   S.prs.push(pr);
   floater(h.x,h.y-.3,'PR!','#B9F6CA');
   prMessage(pr,h,false);
+  if(S.claudeOn)claudePR(pr);
 }
 const GOOD_NOTES=['added nf-test snapshots','meta.yml is complete','stub test included','emits versions properly','lint passes locally','followed the module template'];
 const BAD_NOTES=['only tested on my laptop','meta.yml still has a TODO','no stub test yet','hardcoded a container tag','skipped lint, it was slow','copied from another module, mostly'];
@@ -492,10 +501,10 @@ function approvePR(id,auto){
   const pr=S.prs.find(p=>p.id===id);if(!pr)return;
   S.prs=S.prs.filter(p=>p!==pr);
   const isNew=!S.mods.has(pr.mod);
-  S.mods.add(pr.mod);S.merged++;S.dayMerged++;S.stars+=isNew?3:1;if(isNew)earn('Module bounties',10);
+  S.mods.add(pr.mod);S.merged++;S.dayMerged++;S.stars+=(isNew?3:1)*(S.hk.fork?2:1);if(isNew)earn('Module bounties',10);
   const h=S.hackers.find(x=>x.id===pr.author);
   if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 +10':'✓ ⭐+1','#B9F6CA')}
-  resolveMsg(pr.msg,auto?'Approved and merged by a maintainer':'Approved and merged');
+  resolveMsg(pr.msg,auto?'Approved and merged by '+(auto===true?'a maintainer':auto):'Approved and merged');
   if(pr.bad)later(rnd(15,40),()=>breakModule(pr.mod,'a bug from a rushed review'));
   checkUnlocks(false);
 }
@@ -507,11 +516,11 @@ function requestChanges(id,auto){
     if(pr.bad)h.frust=clamp(h.frust+2);
     else{h.frust=clamp(h.frust+12);floater(h.x,h.y-.3,'😤 it was fine','#FF8A80')}
   }
-  resolveMsg(pr.msg,auto?'Changes requested by a maintainer':'Changes requested');
+  resolveMsg(pr.msg,auto?'Changes requested by '+(auto===true?'a maintainer':auto):'Changes requested');
   S.timers.push({t:12,fn:()=>{const a=S.hackers.find(x=>x.id===pr.author);if(!a||a.state==='leave')return;
     const q=Math.min(.95,pr.q+.35),bad=Math.random()>q;
     const np={...pr,id:nid(),age:0,q,bad,notes:makeNotes(bad)};S.prs.push(np);
-    prMessage(np,a,true);}});
+    prMessage(np,a,true);if(S.claudeOn)claudePR(np);}});
 }
 function checkUnlocks(silent){
   for(const [k,p] of Object.entries(PIPES)){
@@ -520,11 +529,146 @@ function checkUnlocks(silent){
   }
 }
 
+/* ---------- unhinged ideas: unlocked as the hackathon goes on ---------- */
+const HACKS={
+  claude:{icon:'🤖',label:'Claude license',cost:80,when:'after 6 merged modules',unlock:()=>S.merged>=6,
+    desc:'Hackers write modules twice as fast and Claude reviews every PR, missing a few rushed ones. Every PR burns tokens, and now and then Claude reads the whole repo "for context".'},
+  bribe:{icon:'🤫',label:'Bribe the linter',when:'after your first pipeline',unlock:()=>pipes().length>=1,
+    desc:'Costs 20 ⭐. For a while, half of all CI failures stay hidden. When the bribe runs out, everything it hid goes red at once.'},
+  force:{icon:'💥',label:'Force-push',when:'on day 2',unlock:()=>S.day>=2,
+    desc:'Adds a Force-push button to red CI. Instantly green, costs reputation, and sometimes wipes a merged module from history.'},
+  prod:{icon:'🏭',label:'test_full on prod data',when:'after your first release',unlock:()=>S.released>=1,
+    desc:'Adds a button to unreleased pipelines that makes them ready for v1.0.0 right away. The compute bill arrives the next morning.'},
+  fork:{icon:'🍴',label:'Fork nf-core',when:'after 2 releases',unlock:()=>S.released>=2,
+    desc:'Your fork, your rules. No more template syncs, and modules earn double stars. Each morning a few hackers go back to upstream.'},
+  rust:{icon:'🦀',label:'Rewrite Nextflow in Rust',when:'on day 4',unlock:()=>S.day>=4,
+    desc:'Takes a few days. Half the room writes Rust instead of modules, and the borrow checker sets you back overnight. If it ever ships, pipeline runs are 3× faster.'},
+  swarm:{icon:'🐝',label:'Claude agent swarm',when:'on day 5, if you own a Claude license',unlock:()=>S.day>=5&&S.hk.claude,
+    desc:'Four agents write and merge modules nonstop, no pizza needed. A quarter of their work is broken. They burn tokens, and the bill grows when they start reviewing each other. Pull the plug any time.'},
+  mega:{icon:'💍',label:'One pipeline to rule them all',when:'after 4 pipelines and 3 releases',unlock:()=>pipes().length>=4&&S.released>=3,
+    desc:'Merge every pipeline into nf-core/everything. Users pay double, but when one goes red they all go red. That makes a CI meltdown far easier. There is no undo.'}
+};
+function pipes(){return S.objs.filter(o=>o.kind==='pipe')}
+function checkHacks(){
+  for(const [k,x] of Object.entries(HACKS))if(!S.hu.has(k)&&x.unlock()){S.hu.add(k);post('#announcements',CORE,`🔓 New idea unlocked: ${x.icon} ${x.label}. It is in the Build tab. This is probably fine.`);note(`🔓 Unlocked: ${x.icon} ${x.label}. See the Build tab.`)}
+}
+function doHack(k){
+  const x=HACKS[k];if(!S.hu.has(k))return;
+  switch(k){
+    case 'claude':
+      if(S.hk.claude){S.claudeOn=!S.claudeOn;break}
+      if(S.credits<x.cost)return;
+      spend('Claude license',x.cost);S.hk.claude=S.claudeOn=true;
+      post('#hackathon',CORE,'🤖 Claude license bought. Everyone is now "pair programming".');break;
+    case 'bribe':
+      if(S.bribeT>0||S.stars<20)return;
+      S.stars-=20;S.bribeT=90;S.hidden=0;
+      post('#pipelines',BOT,'🤫 The linter accepted 20 ⭐. CI feels strangely calm.');break;
+    case 'fork':
+      if(S.hk.fork)return;
+      S.hk.fork=true;S.drift=0;
+      post('#announcements',CORE,'🍴 You forked nf-core. No more template syncs, no more core-team rules. Upstream says they are "disappointed, not angry".');break;
+    case 'rust':
+      if(S.rustDone)return;
+      if(S.hk.rust){S.hk.rust=false;S.rustP=null;post('#random',rh(),'🦀 we abandoned the Rust rewrite. back to Groovy');break}
+      S.hk.rust=true;S.rustP=0;
+      post('#announcements',CORE,'🦀 We are rewriting Nextflow in Rust. How hard can it be?');break;
+    case 'swarm':
+      if(S.hk.swarm){S.staff=S.staff.filter(s=>s.type!=='agent');S.hk.swarm=false;S.swarmLoop=0;post('#modules',BOT,'🔌 Plug pulled. The swarm is gone. It is very quiet.');break}
+      S.hk.swarm=true;S.swarmLoop=0;S.loopT=30;
+      for(let i=0;i<4;i++){const [dc,dr]=DOOR[i%2];S.staff.push({id:nid(),type:'agent',name:'agent_'+(i+1),x:dc+.5,y:dr+.5,path:[],state:'idle',wait:0,target:null,rev:rnd(0,8),timer:0})}
+      post('#modules',BOT,'🐝 The Claude agent swarm is online. Four agents, zero pizza.');break;
+    case 'mega':
+      if(S.hk.mega||pipes().length<2)return;
+      S.hk.mega=true;
+      post('#announcements',CORE,`💍 Every pipeline is now nf-core/everything. One release, one CI run, one point of failure.`);
+      if(pipes().some(o=>o.broken))for(const o of pipes())breakPipe(o,'it is all one pipeline now');
+      break;
+  }
+}
+function claudePR(pr){
+  spend('Claude tokens',Math.round(rnd(1,3)));
+  if(Math.random()<.03){const c=Math.max(40,Math.round(S.credits*.25));spend('Claude tokens',c);
+    post('#modules',BOT,pick([`🤖 Claude read the entire repo "for context" before reviewing \`${pr.mod}\`. 🪙−${c}`,`🤖 Claude refactored every module that imports \`${pr.mod}\`. Nobody asked. 🪙−${c}`]))}
+  later(3,()=>{if(!S.prs.includes(pr))return;spend('Claude tokens',1);
+    if(pr.bad&&Math.random()>.4)requestChanges(pr.id,'Claude');else approvePR(pr.id,'Claude')});
+}
+function agentPR(s){
+  const pr={id:nid(),mod:pickMod(),author:s.id,authorName:s.name,age:0,msg:null,q:.75,bad:Math.random()<.25,notes:[]};
+  S.prs.push(pr);approvePR(pr.id,'the swarm');floater(s.x,s.y-.3,'🤖 merged','#B9F6CA');
+}
+/* bribe the linter: half of all breakage is postponed, not prevented */
+function hide(){if(S.bribeT>0&&!S.megaLock&&Math.random()<.5){S.hidden++;return true}return false}
+function bribeDue(){
+  const n=Math.min(S.hidden,4);S.hidden=0;
+  post('#pipelines',BOT,n?`🤫 The bribe ran out. The linter remembers everything: ${n} hidden failure${n>1?'s':''} just went red.`:'🤫 The bribe ran out. Nothing was hiding. This time.');
+  for(let i=0;i<n;i++){const ps=pipes().filter(o=>!o.broken),ms=[...S.mods].filter(m=>!S.badMods.has(m));
+    if(ps.length&&Math.random()<.5)breakPipe(pick(ps),'a failure the linter was paid to ignore');else if(ms.length)breakModule(pick(ms),'a failure the linter was paid to ignore')}
+}
+function forcePush(j){
+  if(!S.hu.has('force')||j.kind==='task'||!stillBroken(j))return;
+  S.rep=clamp(S.rep-4);
+  if(j.kind==='mod')fixModule(j.ref,'Force-pushed');else fixPipe(j.ref,'Force-pushed');
+  note('💥 Force-pushed. Reputation −4.');
+  if(Math.random()<.2){const ok=[...S.mods].filter(m=>!S.badMods.has(m));if(!ok.length)return;
+    const m=pick(ok);S.mods.delete(m);
+    post('#modules',GH,`💥 The force-push rewrote history. \`${m}\` no longer exists. Someone will have to write it again.`);
+    for(const o of pipes())if(pMods(o).includes(m))breakPipe(o,`\`${m}\` was force-pushed out of existence`)}
+}
+function prodRun(id){
+  const o=objById(id);if(!o||o.released||o.broken||!S.hu.has('prod'))return;
+  const p=PIPES[o.type],bill=p.run*Math.max(1,p.rel-o.green)*3;
+  S.prodBill+=bill;o.green=p.rel;floater(o.c+1,o.r,'🏭 green','#FFE08A');
+  post('#pipelines',BOT,`🏭 Ran test_full on production data for nf-core/${o.type}. It is ready for v1.0.0. The bill, about 🪙${bill}, arrives tomorrow morning.`);
+  if(Math.random()<.25){S.rep=clamp(S.rep-8);followUp('#pipelines',CORE,'Someone noticed the "test" bucket had real patient data in it. Reputation −8.')}
+}
+function updHacks(dt){
+  checkHacks();
+  if(S.bribeT>0){S.bribeT-=dt;if(S.bribeT<=0)bribeDue()}
+  if(S.rustP!=null){S.rustP+=dt*35/DAY_LEN;if(S.rustP>=100){S.rustP=null;S.rustDone=true;post('#announcements',CORE,'🦀 Nextflow has been rewritten in Rust. Pipeline runs are now 3× faster. Nobody can explain the build system.')}}
+  if(S.hk.swarm){
+    S.tokAcc+=S.staff.filter(s=>s.type==='agent').length*.15*(1+S.swarmLoop)*dt;
+    if(S.tokAcc>=1){const c=Math.floor(S.tokAcc);S.tokAcc-=c;spend('Swarm tokens',c)}
+    S.loopT-=dt;if(S.loopT<=0){S.loopT=30;if(Math.random()<.35){S.swarmLoop++;post('#modules',BOT,`🐝 The agents are now reviewing each other's reviews. Token burn is ×${1+S.swarmLoop}.`)}}
+  }
+}
+/* overnight consequences, after the new day's ledger starts */
+function morningHacks(){
+  if(S.prodBill){spend('Prod compute bill',S.prodBill);post('#hackathon',CORE,`🏭 The cloud bill for test_full on prod data arrived: 🪙−${S.prodBill}.`);S.prodBill=0}
+  if(S.rustP!=null&&Math.random()<.35){S.rustP=Math.max(0,S.rustP-20);post('#random',rh(),'🦀 the borrow checker rejected last night\'s work. Rust rewrite progress −20%')}
+  if(S.hk.fork){
+    const live=S.hackers.filter(h=>h.state!=='leave'),n=Math.min(Math.max(0,live.length-3),1+Math.floor(rnd(0,2)));
+    for(let i=0;i<n;i++){const h=live.splice(Math.floor(Math.random()*live.length),1)[0];release(h);if(h.job){claim(h.job,false);h.job=null}S.hackers=S.hackers.filter(x=>x!==h)}
+    if(n)post('#hackathon',CORE,`🍴 ${n} hacker${n>1?'s':''} went back to upstream nf-core overnight.`);
+  }
+}
+function hackBtn(k){
+  const x=HACKS[k],b=(label,dis,pressed)=>`<button class="btn small" data-act="hack" data-arg="${k}" ${dis?'disabled':''}${pressed!=null?` aria-pressed="${pressed}"`:''}>${label}</button>`,ok=t=>`<span class="pill ok">${t}</span>`;
+  switch(k){
+    case 'claude':return S.hk.claude?b(S.claudeOn?'Claude is on':'Claude is off',false,S.claudeOn):b('Buy 🪙'+x.cost,S.credits<x.cost);
+    case 'bribe':return b(S.bribeT>0?`Bribed, ${Math.ceil(S.bribeT/(DAY_LEN/12))}h left`:'Bribe ⭐20',S.bribeT>0||S.stars<20);
+    case 'force':return ok('Use it from the CI bar');
+    case 'prod':return ok('Use it on an unreleased pipeline');
+    case 'fork':return S.hk.fork?ok('Forked'):b('Fork it');
+    case 'rust':return S.rustDone?ok('🦀 Shipped, runs are 3× faster'):S.hk.rust?`<div class="bars">${bar('Progress',S.rustP,'#CE422B')}</div>${b('Abandon the rewrite')}`:b('Start the rewrite');
+    case 'swarm':return b(S.hk.swarm?'Pull the plug':'Launch the swarm',false,!!S.hk.swarm);
+    case 'mega':return S.hk.mega?ok('nf-core/everything'):b('Merge them all',pipes().length<2);
+  }
+}
+/* unlocked ideas, plus a teaser for the next one */
+function hackCards(){
+  const ks=Object.keys(HACKS),next=ks.find(k=>!S.hu.has(k));
+  const cards=ks.filter(k=>S.hu.has(k)||k===next).map(k=>{const x=HACKS[k];
+    return S.hu.has(k)?`<div class="card hk"><h3>${x.icon} ${x.label}</h3><p class="hint">${x.desc}</p>${hackBtn(k)}</div>`
+      :`<div class="card hk locked"><h3>🔒 Next idea</h3><p class="hint">Unlocks ${x.when}.</p></div>`}).join('');
+  return `<h4 class="hk-h px">🧨 Unhinged ideas</h4><div class="grid-build">${cards}</div>`;
+}
+
 /* ---------- pipelines ---------- */
 function pMods(o){const p=PIPES[o.type];return [...p.mods,...p.up.slice(0,o.level-1)]}
 function fullOn(o){return o.full&&!o.released}
 function runCost(o){return Math.round(PIPES[o.type].run*(1+.5*(o.level-1)))*(fullOn(o)?3:1)}
-function commTarget(o){return PIPES[o.type].draw*13*o.level*Math.pow(clamp(S.rep,20,100)/60,1.5)}
+function commTarget(o){return PIPES[o.type].draw*13*o.level*Math.pow(clamp(S.rep,20,100)/60,1.5)*(S.hk.mega?2:1)}
 function upCost(o){return Math.round(PIPES[o.type].cost*.6*o.level)}
 function upMod(o){return o.level<3?PIPES[o.type].up[o.level-1]:null}
 function ver(o){return 'v'+o.level+'.0.0'}
@@ -534,10 +678,12 @@ const ISSUES=['pipeline fails on my data','error after the latest release','is t
 const ROT_REASONS=['bioconda bumped the tool version','a container tag went missing','an nf-test snapshot changed upstream','upstream renamed an output file'];
 
 function breakPipe(o,reason,badMod){
-  if(o.broken)return;
+  if(o.broken||hide())return false;
   o.broken=true;o.claimed=false;o.badMod=badMod||null;o.green=Math.max(0,o.green-(badMod?6:3));o.issueT=rnd(8,14);
   const m=post('#pipelines',GH,`❌ CI failed on nf-core/${o.type}: ${reason}.${o.released?' Users are drifting away until it is green.':''}`,fixActions({kind:'pipe',ref:o.id}),{noAuto:true});
   o.msg=m.id;
+  if(S.hk.mega&&!S.megaLock){S.megaLock=1;for(const p of pipes())if(p!==o)breakPipe(p,'it is all one pipeline now');S.megaLock=0}
+  return true;
 }
 function fixPipe(id,who){
   const o=objById(id);if(!o||!o.broken)return false;
@@ -545,10 +691,11 @@ function fixPipe(id,who){
   o.broken=false;o.claimed=false;o.badMod=null;
   resolveMsg(o.msg,who||'Fixed');o.msg=null;
   floater(o.c+1,o.r+.5,'✅ green','#B9F6CA');
+  if(S.hk.mega&&!S.megaLock){S.megaLock=1;for(const p of pipes())if(p.broken)fixPipe(p.id,who);S.megaLock=0}
   return true;
 }
 function breakModule(m,reason){
-  if(!S.mods.has(m)||S.badMods.has(m))return;
+  if(!S.mods.has(m)||S.badMods.has(m)||hide())return;
   S.badMods.add(m);
   const msg=post('#modules',GH,`❌ Module CI red on \`${m}\`: ${reason}. Pipelines using it can't be built or upgraded, and built ones will go red.`,fixActions({kind:'mod',ref:m}),{noAuto:true});
   S.modMsg[m]=msg.id;
@@ -607,11 +754,12 @@ function renderCI(){
   const redM=mods.filter(m=>S.badMods.has(m)),redP=pipes.filter(o=>o.broken),n=redM.length+redP.length;
   const lights=`<span class="lights" aria-hidden="true">${pipes.map(o=>`<i class="light pipe ${o.broken?'bad':pMods(o).some(m=>S.badMods.has(m))?'risk':''}" title="nf-core/${o.type}"></i>`).join('')}${mods.map(m=>`<i class="light ${S.badMods.has(m)?'bad':''}" title="${esc(m)}"></i>`).join('')}</span>`;
   const head=`<div class="ci-head"><b class="px">CI</b>${n?`<b style="color:var(--bad)">${n} red</b>`:'<span style="color:var(--accent)">all green</span>'}${lights}</div>`;
-  const row=(j,name)=>{const f=fixLabel(j);return `<div class="ci-red"><b>❌ ${name}</b>${f?`<span>${f}</span>`:`<button class="btn small" data-act="assign" data-arg="${j.kind}:${j.kind==='mod'?esc(j.ref):j.ref}">Send a hacker</button>`}</div>`};
+  const row=(j,name)=>{const f=fixLabel(j);return `<div class="ci-red"><b>❌ ${name}</b>${f?`<span>${f}</span>`:`<button class="btn small" data-act="assign" data-arg="${j.kind}:${j.kind==='mod'?esc(j.ref):j.ref}">Send a hacker</button>${forceBtn(j)}`}</div>`};
   const list=redP.map(o=>row({kind:'pipe',ref:o.id},o.type)).join('')+redM.map(m=>row({kind:'mod',ref:m},esc(m))).join('');
   const tasks=Object.entries(S.tasks).map(([id,t])=>`<div class="ci-red"><span>📝 ${esc(t.label)}</span><span>${fixLabel({kind:'task',ref:+id})||'waiting'}</span></div>`).join('');
   setHTML($('#cibar'),'ci',head+list+tasks,false);
 }
+function forceBtn(j){return S.hu.has('force')?`<button class="btn small" data-act="force" data-arg="${j.kind}:${j.kind==='mod'?esc(j.ref):j.ref}" title="Instantly green. Reputation −4, and it might wipe a module.">💥 Force-push</button>`:''}
 function releasePipe(id){
   const o=objById(id);if(!o)return;const p=PIPES[o.type];
   if(o.released||o.broken||o.green<p.rel)return;
@@ -654,8 +802,9 @@ function pipeStatus(o){
 }
 function pipeButtons(o){
   const p=PIPES[o.type];let b='';
-  if(o.broken)b+=o.claimed?`<span class="hint" style="margin:0">${fixLabel({kind:'pipe',ref:o.id})||'Someone is on it'}</span>`:`<button class="btn small primary" data-act="assign" data-arg="pipe:${o.id}">Send a hacker</button>`;
+  if(o.broken)b+=o.claimed?`<span class="hint" style="margin:0">${fixLabel({kind:'pipe',ref:o.id})||'Someone is on it'}</span>`:`<button class="btn small primary" data-act="assign" data-arg="pipe:${o.id}">Send a hacker</button>${forceBtn({kind:'pipe',ref:o.id})}`;
   else if(!o.released&&o.green>=p.rel)b+=`<button class="btn small primary" data-act="release" data-arg="${o.id}">Release v1.0.0</button>`;
+  if(!o.released&&!o.broken&&o.green<p.rel&&S.hu.has('prod'))b+=`<button class="btn small" data-act="prod" data-arg="${o.id}" title="Ready for v1.0.0 now. A big compute bill arrives tomorrow.">🏭 test_full on prod</button>`;
   if(!o.released&&o.green<p.rel)b+=`<button class="btn small" data-act="profile" data-arg="${o.id}" aria-pressed="${!!o.full}" title="test_full: 3× compute per run, counts as 2 green runs, breaks CI more often. Gets to v1.0.0 sooner, costs more.">-profile ${o.full?'test_full':'test'}</button>`;
   if(o.released&&o.level<3)b+=`<button class="btn small" data-act="upgrade" data-arg="${o.id}" title="Needs ${esc(upMod(o))}" ${canUpgrade(o)?'':'disabled'}>Upgrade to v${o.level+1} 🪙${upCost(o)}</button>`;
   return b;
@@ -670,6 +819,7 @@ function hire(type){
   post('#hackathon',CORE,type==='maint'?'A maintainer has joined. PR reviews and red CI are in good hands.':'A mentor has joined. They will hang around the tables helping people.');
 }
 function updStaff(s,dt){
+  if(s.type==='agent'){s.rev+=dt;if(s.rev>=10){s.rev=0;agentPR(s)}}
   if(s.type==='maint'){s.rev+=dt;if(s.rev>=14&&S.prs.length){s.rev=0;const p=S.prs[0];if(p.bad)requestChanges(p.id,true);else approvePR(p.id,true)}}
   switch(s.state){
     case 'idle':{
@@ -746,7 +896,7 @@ const EVENTS=[
   ()=>{const conflict=Math.random()<.5;return {ch:'#pipelines',user:BOT,
     text:`Template sync PRs just opened on every pipeline. The diff ${tell(conflict,'touches modules.json and every config file','is small, mostly CI config')}.${S.drift?` ${S.drift} earlier sync${S.drift>1?'s are':' is'} still unmerged.`:''}`,
     actions:[
-      {label:'Merge them all',fn:()=>{S.stars+=10;S.drift=0;let n=0;if(conflict)for(const o of S.objs)if(o.kind==='pipe'&&Math.random()<.6){breakPipe(o,'template sync merge conflict');n++}
+      {label:'Merge them all',fn:()=>{S.stars+=10;S.drift=0;let n=0;if(conflict)for(const o of S.objs)if(o.kind==='pipe'&&Math.random()<.6&&breakPipe(o,'template sync merge conflict'))n++;
         followUp('#pipelines',BOT,conflict?(n?`Merged. ${n} pipeline${n>1?'s':''} went red with merge conflicts.`:'Merged with conflicts, but no built pipeline was affected.'):'Merged cleanly. Everything is on the latest template.')}},
       {label:'Leave them for Monday',fn:()=>{S.drift++;allH(h=>h.frust=clamp(h.frust+3));followUp('#pipelines',BOT,`Template drift is now ${S.drift}. Each unmerged sync makes red CI more likely until the next merge.`)}}]}},
   ()=>{const close=Math.random()<.55;return {ch:'#hackathon',user:VENUE,
@@ -808,7 +958,7 @@ function prog(){return S.day-1+Math.min(S.t,DAY_LEN)/DAY_LEN}
 function diff(){const p=prog();return p<1.75?.3+.04*p:.37+(p-1.75)*0.3+Math.max(0,p-4.5)**2*0.07}
 const EVENT_TIER=[1,2,0,1,0,0,2,0,0,0,1,2,0];
 const TIER_NOTES={1:'Late tomorrow things start to pick up: conda trouble, Docker Hub limits, flaky Wi-Fi, and modules breaking upstream.',2:'From tomorrow: template syncs, lint sweeps and enormous PRs. It keeps getting busier from here.'};
-function fireEvent(){const p=prog();fireE(pick(EVENTS.filter((e,i)=>[0,1.75,2.4][EVENT_TIER[i]]<=p)))}
+function fireEvent(){const p=prog();fireE(pick(EVENTS.filter((e,i)=>[0,1.75,2.4][EVENT_TIER[i]]<=p&&!(S.hk.fork&&i===1))))}
 const HAPPY=['just got my first green CI tick 🥹','TIL `-resume` can save an entire afternoon','`nf-core pipelines lint` passed first time. Is this a dream?','anyone want to pair on a stub test?','meta maps finally clicked for me','nf-test snapshots updated, all green 🟢','who knew a tuple could cause so many feelings','the hex stickers are going fast, get yours','my first module got merged and I am telling my mum','every pipeline ends in MultiQC eventually 📊','Harshil-aligned my whole config. It is beautiful','`-resume` just saved me four hours of STAR','watched a bytesize talk on nf-test, feeling powerful','`nf-core modules create` did half my job for me','who deleted the work directory 😱','the `versions.yml` bit finally makes sense'];
 const COMPLAIN={caffeine:'the coffee queue is longer than my sarek run ☕',hunger:'is the pizza a myth?',energy:'I need a beanbag and a nap',fun:'bored. Anyone got a pipeline that needs testing?'};
 function chatter(){
@@ -831,6 +981,7 @@ function update(dt){
   for(const h of [...S.hackers])updHacker(h,dt);
   for(const s of S.staff)updStaff(s,dt);
   updPipes(dt);
+  updHacks(dt);
   S.rotT-=prog()<1.75?0:dt;if(S.rotT<=0){S.rotT=rnd(60,100)/Math.max(diff(),.45);const ok=[...S.mods].filter(m=>NEEDED.includes(m)&&!S.badMods.has(m));if(ok.length>2)breakModule(pick(ok),pick(ROT_REASONS))}
   for(const p of S.prs)p.age+=dt;
   for(const m of S.slack){if(m.actions&&!m.done&&!m.noAuto){m.age+=dt;if(m.age>45){const a=m.actions[m.auto];a.fn();m.done=true;m.choice=a.label+' (nobody answered in time)'}}}
@@ -865,7 +1016,7 @@ function floater(x,y,text,col){S.floaters.push({x,y,text,col,life:1.6});if(S.flo
 /* ---------- days ---------- */
 function endDay(){
   S.paused=true;
-  const staffCost=S.staff.length*40, grant=Math.max(0,Math.round(S.rep*2.5)-15*S.dayLeft);
+  const staffCost=S.staff.filter(s=>s.type!=='agent').length*40, grant=Math.max(0,Math.round(S.rep*2.5)-15*S.dayLeft);
   earn('Sponsor grant',grant);if(staffCost)spend('Salaries',staffCost);
   if(S.credits<0)S.debtDays++;else S.debtDays=0;
   if(S.debtDays>=2){lose('bankrupt');return}
@@ -886,6 +1037,7 @@ function endDay(){
 }
 function nextDay(){
   S.day++;S.t=0;S.dayMerged=0;S.dayLeft=0;S.dayUsers=0;S.dayCompute=0;S.today={};for(const o of S.objs)o.today=0;S.spawnT=2;S.nextEvent=20;
+  morningHacks();
   for(const h of S.hackers){h.needs={caffeine:rnd(50,70),hunger:rnd(70,90),energy:rnd(85,100),fun:rnd(60,80)};h.frust*=.5;h.low=0}
   post('#hackathon',BOT,`Good morning and welcome to day ${S.day}! ☀️`);
   hideModal();S.paused=false;
@@ -1072,10 +1224,10 @@ function draw(now){
       if(b){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+T*.24,y-T*.42,T*.19,0,7);ctx.fill();emoji(b,x+T*.24,y-T*.41,Math.floor(T*.26))}
       if(S.sel&&S.sel.t==='h'&&S.sel.id===a.id){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,T*.42,0,7);ctx.stroke()}
     }else{
-      ctx.fillStyle=a.type==='maint'?'#6B3FA0':'#D4A017';
+      ctx.fillStyle=a.type==='maint'?'#6B3FA0':a.type==='agent'?'#2C3E50':'#D4A017';
       rr(x-T*.2,y-T*.12,T*.4,T*.4,4);ctx.fill();ctx.strokeStyle='#14231A';ctx.lineWidth=2;ctx.stroke();
       ctx.fillStyle='#F1C9A5';ctx.beginPath();ctx.arc(x,y-T*.2,T*.12,0,7);ctx.fill();
-      emoji(a.type==='maint'?'🔧':'🎓',x,y+T*.08,Math.floor(T*.24));
+      emoji(a.type==='maint'?'🔧':a.type==='agent'?'🤖':'🎓',x,y+T*.08,Math.floor(T*.24));
       if(a.state==='work'&&a.type==='maint')emoji('⚙️',x+T*.26,y-T*.4,Math.floor(T*.26));
     }
   }
@@ -1143,6 +1295,9 @@ document.addEventListener('click',e=>{
     case 'profile':{const o=objById(+arg);if(o)o.full=!o.full;break}
     case 'remove':{const o=objById(+arg);if(o){earn('Refunds',Math.floor((o.kind==='pipe'?PIPES[o.type].cost:FAC[o.type].cost)/2));removeObj(o);S.sel=null}break}
     case 'hire':hire(arg);break;
+    case 'hack':doHack(arg);break;
+    case 'force':{const [k,r]=arg.split(':');forcePush({kind:k,ref:k==='pipe'?+r:r});break}
+    case 'prod':prodRun(+arg);break;
     case 'ledger':S.sel=S.sel&&S.sel.t==='ledger'?null:{t:'ledger'};break;
     case 'desel':S.sel=null;break;
   }
@@ -1165,7 +1320,7 @@ function updateHUD(){
   $('#clock').textContent=`Day ${S.day}, ${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const a=avgHap();const face=a>65?'😄':a>45?'🙂':a>25?'😐':'😠';
   const owned=NEEDED.filter(x=>S.mods.has(x)).length;
-  const fx=[[S.noWifi>0,'📶','No Wi-Fi','Wi-Fi is down: nobody can write modules'],[S.slow>0,'🐢','Slow runs','Docker Hub rate limit: runs are slow'],[S.noStickers>0,'🏷️','No stickers','Out of stickers'],[S.breakMod>0,'🔥','Flaky CI','CI is unstable'],[S.drift>0,'🧭','Drift '+S.drift,'Template drift: '+S.drift+' unmerged syncs']].filter(f=>f[0]).map(f=>`<span class="stat" title="${f[3]}">${f[1]} ${f[2]}</span>`).join('');
+  const fx=[[S.noWifi>0,'📶','No Wi-Fi','Wi-Fi is down: nobody can write modules'],[S.slow>0,'🐢','Slow runs','Docker Hub rate limit: runs are slow'],[S.noStickers>0,'🏷️','No stickers','Out of stickers'],[S.breakMod>0,'🔥','Flaky CI','CI is unstable'],[S.drift>0,'🧭','Drift '+S.drift,'Template drift: '+S.drift+' unmerged syncs'],[S.claudeOn,'🤖','Claude','Claude is writing and reviewing PRs, and burning tokens'],[S.bribeT>0,'🤫','Bribed','The linter is looking the other way, for now'],[S.rustP!=null,'🦀','Rust '+Math.floor(S.rustP||0)+'%','Rewriting Nextflow in Rust: modules are slower'],[S.hk.swarm,'🐝','Swarm ×'+(1+S.swarmLoop),'The agent swarm is burning tokens'],[S.hk.mega,'💍','everything','One pipeline: one red, all red']].filter(f=>f[0]).map(f=>`<span class="stat" title="${f[3]}">${f[1]} ${f[2]}</span>`).join('');
   const kpi=(label,icon,val,title,extra)=>`<span class="kpi${extra||''}" title="${title}"><small>${label}</small><span>${icon} <b class="px">${val}</b></span></span>`;
   const alerts=fx+dangerChips();
   setHTML($('#stats'),'stats',
@@ -1192,7 +1347,7 @@ function renderPanel(force){
   const p=$('#panel');let html='';
   const chip=m=>`<span class="chip ${S.mods.has(m)?'ok':''}${S.badMods.has(m)?' bad':''}" title="${S.badMods.has(m)?'Red CI':S.mods.has(m)?'Merged':'Not merged yet'}">${esc(m)}</span>`;
   if(S.tab==='build'){
-    html=`<div class="goal"><span class="gi" aria-hidden="true">🎯</span><div><b class="px">Next goal</b><div>${goalHint()}</div></div></div><div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><span class="c">🪙${f.cost}</span><span class="d">${f.tip}</span></button>`).join('')+`</div>`;
+    html=`<div class="goal"><span class="gi" aria-hidden="true">🎯</span><div><b class="px">Next goal</b><div>${goalHint()}</div></div></div><div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><span class="c">🪙${f.cost}</span><span class="d">${f.tip}</span></button>`).join('')+`</div>`+hackCards();
   }else if(S.tab==='pipes'){
     html=Object.entries(PIPES).map(([k,pp])=>{
       const built=S.objs.find(o=>o.kind==='pipe'&&o.type===k);
