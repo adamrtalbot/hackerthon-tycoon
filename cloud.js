@@ -15,13 +15,22 @@
     $('#cloud-status').textContent=message;
     $('#cloud-status').dataset.error=String(error);
   }
+  function identityChanged(){
+    if(!storageAvailable)return false;
+    try{return localStorage.getItem(key)!==token}catch{storageAvailable=false;return false}
+  }
   function controls(){
     dialog.querySelectorAll('button,input').forEach(el=>el.disabled=busy);
     $('#submit-score').disabled=busy||!S.over;
     $('#score-hint').textContent=S.over?`Finished on day ${S.day} · ${score().toLocaleString()} points. Your name will be public.`:'Finish a hackathon to submit your score.';
+    $('#identity-conflict').hidden=!identityChanged();
     dialog.setAttribute('aria-busy',String(busy));
   }
+  window.addEventListener('storage',event=>{
+    if(event.storageArea===localStorage&&(event.key===key||event.key===null))controls();
+  });
   async function api(path,method='GET',body,code=token){
+    if(method!=='GET'&&identityChanged())throw new Error('Recovery code changed in another tab. Choose “Keep this tab’s code” before saving or submitting scores.');
     let response;
     try{
       response=await fetch(`/api/${path}`,{
@@ -81,6 +90,11 @@
       $('[data-cloud="reveal"]').textContent=input.type==='password'?'Show code':'Hide code';
     },
     refresh:()=>run(leaderboard),
+    remember:()=>run(async()=>{
+      try{localStorage.setItem(key,token);storageAvailable=true}
+      catch{throw new Error('This browser could not remember the code. Copy this tab’s code somewhere safe before leaving.')}
+      status('This browser now remembers this tab’s code. Your current game has not changed.');
+    }),
     save:()=>run(async()=>{
       const save=exportReplay();
       if(revision===null)await inspectSave();

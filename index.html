@@ -223,9 +223,13 @@ button.kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     <p class="hint">One save slot. Save before you leave, then load it on any device with your private recovery code.</p>
     <div class="row"><button class="btn primary" data-cloud="save">Save game</button><button class="btn" data-cloud="load">Load game</button></div>
     <p id="cloud-status" role="status" aria-live="polite"></p>
+    <div id="identity-conflict" hidden role="alert">
+      <p>Another tab changed the recovery code remembered by this browser. This game still uses its original code. Keep this tab’s code to save here, or copy it below before connecting another game.</p>
+      <button class="btn small" data-cloud="remember">Keep this tab’s code</button>
+    </div>
     <details id="recovery-details"><summary>Recovery code &amp; another device</summary>
       <p class="hint">Keep your code somewhere safe. Anyone with it can load or replace your save and submit scores as you. There is no email recovery.</p>
-      <label for="recovery-code">This browser’s private code</label>
+      <label for="recovery-code">This tab’s private code</label>
       <input id="recovery-code" type="password" readonly autocomplete="off" spellcheck="false">
       <button class="btn small" data-cloud="reveal">Show code</button>
       <form id="recover-form">

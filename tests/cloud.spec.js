@@ -121,3 +121,71 @@ test('failed requests and incompatible saves keep the current game; dialog traps
   await expect(page.locator('#cloud')).not.toBeVisible();
   expect(await page.evaluate(()=>S.paused)).toBe(true);
 });
+
+test('changing recovery identity in another tab blocks writes until explicitly reconciled', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(() => { newGame(12);gameAction('start');gameAction('speed','0'); });
+  await openCloud(page);
+  await page.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(page.locator('#cloud-status')).toContainText('Saved day 1');
+  const originalCode = await page.locator('#recovery-code').inputValue();
+  const second = await context.newPage();
+  await second.goto('/');
+  await openCloud(second);
+  await second.getByRole('button', { name: 'Load game', exact: true }).click();
+  await expect(second.locator('#cloud-status')).toContainText('Loaded day 1');
+  const before = await second.evaluate(() => exportReplay());
+  const otherCode = 'b'.repeat(64);
+  const otherSave = { version: 1, seed: 20, steps: 0, commands: [] };
+  expect((await context.request.put('/api/save', {
+    headers: { Authorization: `Bearer ${otherCode}` }, data: { revision: 0, save: otherSave },
+  })).ok()).toBe(true);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#recovery-details summary').click();
+  await page.getByLabel('Use a code from another device').fill(otherCode);
+  await page.getByRole('button', { name: 'Connect saved game' }).click();
+  await expect(page.locator('#cloud-status')).toContainText('Loaded day 1');
+  await expect(second.locator('#identity-conflict')).toBeVisible();
+  await second.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(second.locator('#cloud-status')).toContainText('Recovery code changed');
+  expect(await second.locator('#recovery-code').inputValue()).toBe(originalCode);
+  expect(await second.evaluate(() => exportReplay())).toEqual(before);
+  const saved = async code => (await context.request.get('/api/save', { headers: { Authorization: `Bearer ${code}` } })).json();
+  expect((await saved(originalCode)).revision).toBe(1);
+  expect((await saved(otherCode)).save).toEqual(otherSave);
+
+  await second.getByRole('button', { name: 'Keep this tab’s code' }).click();
+  await expect(second.locator('#identity-conflict')).not.toBeVisible();
+  await second.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(second.locator('#cloud-status')).toContainText('Saved day 1');
+  expect((await saved(originalCode)).revision).toBe(2);
+  await expect(page.locator('#identity-conflict')).toBeVisible();
+
+  // A write already in flight may finish, but must not hide the identity warning.
+  await second.route('**/api/save', async route => {
+    await page.evaluate(code => localStorage.setItem('nfcore-hackathon-cloud-code', code), otherCode);
+    await route.continue();
+  }, { times: 1 });
+  await second.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(second.locator('#cloud-status')).toContainText('Saved day 1');
+  await expect(second.locator('#identity-conflict')).toBeVisible();
+  expect((await saved(originalCode)).revision).toBe(3);
+  await second.getByRole('button', { name: 'Keep this tab’s code' }).click();
+
+  // A pre-write check also protects against a storage event that has not arrived.
+  await second.evaluate(code => localStorage.setItem('nfcore-hackathon-cloud-code', code), otherCode);
+  await second.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(second.locator('#cloud-status')).toContainText('Recovery code changed');
+  expect((await saved(originalCode)).revision).toBe(3);
+  await second.evaluate(() => {
+    newGame(103);gameAction('start');
+    for(let i=0;i<20000&&!S.over;i++){if(S.paused)gameAction('nextday');advanceGame();}
+  });
+  await second.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await second.getByLabel('Public player name').fill('blocked-score');
+  await second.getByRole('button', { name: 'Submit finished game' }).click();
+  await expect(second.locator('#score-status')).toContainText('Recovery code changed');
+  const board = await (await context.request.get('/api/leaderboard')).json();
+  expect(board.entries.some(entry => entry.name === 'blocked-score')).toBe(false);
+  await second.close();
+});
