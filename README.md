@@ -7,6 +7,7 @@ A browser game where you run an nf-core hackathon for as long as you can.
 - Red CI needs a person. Send a hacker, or hire a maintainer. Failed runs still burn compute.
 - Keep everyone fed, caffeinated and happy. The sponsor grant each night follows your reputation.
 - Don't build everything at once. End two days in a row in debt and the hackathon is over.
+- As the hackathon goes on, unhinged ideas unlock in the Build tab: a Claude license, force-pushing, rewriting Nextflow in Rust and more. Each one helps now and costs you later.
 
 ## Play
 
@@ -28,4 +29,4 @@ uv run sim/sim.py good 8 4   # policy, days, runs
 uv run sim/ui.py             # screenshots of every panel in sim/shots/
 ```
 
-Policies: `good` plays carefully, `build` builds every pipeline as fast as it can, `rush` also approves every PR and hires staff, `idle` does nothing. Each snapshot line shows day, time, credits, hackers, happiness, reputation, pipelines (`*` released, `!` red), modules, red modules and score, followed by that day's ledger.
+Policies: `good` plays carefully, `build` builds every pipeline as fast as it can, `rush` also approves every PR and hires staff, `idle` does nothing, `chaos` plays like `good` and uses every unhinged idea as soon as it unlocks. Each snapshot line shows day, time, credits, hackers, happiness, reputation, pipelines (`*` released, `!` red), modules, red modules, score and the ideas unlocked so far, followed by that day's ledger.

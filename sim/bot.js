@@ -1,4 +1,4 @@
-// Bot policies for sim.py. good: reviews PRs, keeps a reserve, builds steadily. build: zero reserve, builds and upgrades every pipeline asap, test_full on. rush: like build, also approves every PR and hires 4 staff. idle: does nothing.
+// Bot policies for sim.py. chaos: good, plus every unhinged idea as soon as it unlocks. good: reviews PRs, keeps a reserve, builds steadily. build: zero reserve, builds and upgrades every pipeline asap, test_full on. rush: like build, also approves every PR and hires 4 staff. idle: does nothing.
 window.runBot=function(policy,maxDays){
   newGame();S.paused=false;
   const out=[];let tick=0;const DT=.05;
@@ -13,6 +13,13 @@ window.runBot=function(policy,maxDays){
     update(DT);tick++;
     if(tick%20)continue; // act every 1s game time
     if(policy==='idle'){continue}
+    // chaos: plays like good, and fires every unhinged idea as soon as it unlocks
+    if(policy==='chaos'){
+      for(const k of ['claude','fork','rust','swarm','mega'])if(S.hu.has(k)&&!S.hk[k]&&!(k==='rust'&&S.rustDone))doHack(k);
+      if(S.hu.has('bribe'))doHack('bribe');
+      if(S.hu.has('force')&&Math.random()<.1){const o=S.objs.find(o=>o.kind==='pipe'&&o.broken&&!o.claimed);if(o)forcePush({kind:'pipe',ref:o.id})}
+      if(S.hu.has('prod'))for(const o of S.objs)if(o.kind==='pipe')prodRun(o.id);
+    }
     // PRs
     for(const pr of [...S.prs]){ if(pr.age<3)continue; const seesBad=Math.random()<.8?pr.bad:!pr.bad;
       if(policy==='rush'||!seesBad)approvePR(pr.id,false);else requestChanges(pr.id,false);}
@@ -36,5 +43,5 @@ window.runBot=function(policy,maxDays){
   }
   if(S.over)out.push(snap('OVER'));
   return {out,reason:S.overReason,score:score()};
-  function snap(tag){return [tag,S.day,clockStr(),Math.round(S.credits),S.hackers.filter(h=>h.state!=='leave').length,Math.round(avgHap()),Math.round(S.rep),S.objs.filter(o=>o.kind==='pipe').map(o=>o.type.slice(0,4)+(o.released?'*':'')+(o.broken?'!':'')).join(','),S.mods.size,S.badMods.size,score()].join(' ')}
+  function snap(tag){return [tag,S.day,clockStr(),Math.round(S.credits),S.hackers.filter(h=>h.state!=='leave').length,Math.round(avgHap()),Math.round(S.rep),S.objs.filter(o=>o.kind==='pipe').map(o=>o.type.slice(0,4)+(o.released?'*':'')+(o.broken?'!':'')).join(','),S.mods.size,S.badMods.size,score(),[...S.hu].join('+')].join(' ')}
 };
