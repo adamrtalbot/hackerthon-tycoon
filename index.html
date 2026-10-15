@@ -37,6 +37,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Atkinson Hyp
   #app{grid-template-columns:minmax(0,560px) minmax(0,1fr);grid-template-areas:"hud hud" "ci side" "map side" "inspect side";grid-template-rows:auto auto auto 1fr;align-items:start}
 }
 .hud{grid-area:hud;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+@media (max-width:879px){.brand{display:none}.hud{position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0;margin:-6px 0 0;padding-top:max(6px,env(safe-area-inset-top,0px))}}
 .brand{font-size:18px;font-weight:700;margin-right:auto}
 .clock{font-size:14px}
 .speed{display:flex;gap:4px}
@@ -110,7 +111,7 @@ button.stat:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .meta .ch{color:var(--slack);font-weight:700}
 .meta .tm{color:var(--muted)}
 .msg p{margin:2px 0 6px;overflow-wrap:anywhere}
-.msg code{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:13px}
+.msg code,.hint code{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:13px}
 .choice{font-size:13px;color:var(--muted)}
 .bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:13px;margin:6px 0}
 .bar{height:10px;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;background:var(--panel)}
@@ -217,7 +218,7 @@ function newGame(){
     breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],debtDays:0,lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
     names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0};
   addObj('fac','table',3,8); addObj('fac','table',8,8); addObj('fac','coffee',5,4);
-  for(let i=0;i<4;i++) spawnHacker();
+  for(let i=0;i<4;i++) spawnHacker().work=rnd(40,75);
   post('#hackathon',BOT,'Welcome to the nf-core hackathon! 🎉 Grab a table, write some modules, ship some pipelines.');
   checkUnlocks(true);
   S.unread=0;
@@ -365,7 +366,7 @@ function updHacker(h,dt){
         if(f.need&&!(o.type==='stickers'&&S.noStickers>0))n[f.need]=clamp(n[f.need]+f.gain*dt);
         if(o.type==='help')h.frust=clamp(h.frust-14*dt);
         if(o.type==='table'){
-          const rate=(S.noWifi>0?0:.6+2.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
+          const rate=(S.noWifi>0?0:2.2+1.6*Math.min(diff(),1.5))*(n.caffeine/100+.35)*(1-h.frust/150)*(mentorNear(h)?1.6:1);
           h.work+=rate*dt; n.energy=clamp(n.energy-.5*dt);
           if(h.work>=100){h.work=0;openPR(h)}
         }
@@ -392,6 +393,7 @@ function updHacker(h,dt){
 function finishRun(h,o){
   const p=PIPES[o.type];
   if(o.broken){
+    if(S.credits>0){const c=runCost(o);spend('Failed runs',c);o.today=(o.today||0)-c}
     h.frust=clamp(h.frust+18);h.needs.fun=clamp(h.needs.fun+5);
     floater(h.x,h.y,'❌ CI red','#FF8A80');
     if(Math.random()<.2)post('#pipelines',huser(h),pick([`is anyone looking at the red CI on nf-core/${o.type}?`,`nf-core/${o.type} is broken and I have a demo in an hour 😬`,`tried nf-core/${o.type}, got a wall of red`]));
@@ -404,10 +406,10 @@ function finishRun(h,o){
     return;
   }
   spend('Compute',cost);const pay=runPay(o);earn('Pipeline runs',pay);o.today=(o.today||0)+pay-cost;
-  h.needs.fun=clamp(h.needs.fun+p.fun*(1+.2*(o.level-1))*(p.field===h.field?1.4:1));o.runs++;o.green++;
+  h.needs.fun=clamp(h.needs.fun+p.fun*(1+.2*(o.level-1))*(p.field===h.field?1.4:1));o.runs++;o.green+=fullOn(o)?2:1;
   floater(o.c+1,o.r+.3,'+'+(pay-cost),'#FFE08A');
   const badIn=pMods(o).filter(m=>S.badMods.has(m));
-  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))+S.breakMod+.02*S.drift+.1*badIn.length){
+  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))*(fullOn(o)?1.5:1)+S.breakMod+.02*S.drift+.1*badIn.length){
     if(badIn.length&&Math.random()<.75){const m=pick(badIn);breakPipe(o,`it uses \`${m}\`, which is red`,m)}
     else breakPipe(o,pick(RED_REASONS));
   }
@@ -432,7 +434,7 @@ function openPR(h){
   const want=NEEDED.filter(m=>!S.mods.has(m)&&!pending.has(m));
   // hackers gravitate to whichever unbuilt pipeline is closest to complete
   const close=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).map(([k,p])=>({p,miss:p.mods.filter(m=>want.includes(m))})).filter(x=>x.miss.length).sort((a,b)=>a.miss.length-b.miss.length||a.p.cost-b.p.cost)[0];
-  const mod=close&&Math.random()<.6?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+  const mod=close&&(!S.unlocked.size||Math.random()<.6)?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
   const q=clamp(prQuality(h)+rnd(-.1,.1)+(1-Math.min(diff(),1))*.3,.05,.95);
   const bad=Math.random()>q;
   const pr={id:nid(),mod,author:h.id,authorName:h.name,age:0,msg:null,q,bad,notes:makeNotes(bad)};
@@ -455,9 +457,9 @@ function approvePR(id,auto){
   const pr=S.prs.find(p=>p.id===id);if(!pr)return;
   S.prs=S.prs.filter(p=>p!==pr);
   const isNew=!S.mods.has(pr.mod);
-  S.mods.add(pr.mod);S.merged++;S.dayMerged++;earn('PR merges',isNew?15:8);
+  S.mods.add(pr.mod);S.merged++;S.dayMerged++;S.stars+=isNew?3:1;if(isNew)earn('Module bounties',10);
   const h=S.hackers.find(x=>x.id===pr.author);
-  if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 +15':'✓ +8','#B9F6CA')}
+  if(h){h.frust=clamp(h.frust-10);h.needs.fun=clamp(h.needs.fun+10);floater(h.x,h.y-.3,isNew?'🧩 +10':'✓ ⭐+1','#B9F6CA')}
   resolveMsg(pr.msg,auto?'Approved and merged by a maintainer':'Approved and merged');
   if(pr.bad)later(rnd(15,40),()=>breakModule(pr.mod,'a bug from a rushed review'));
   checkUnlocks(false);
@@ -485,7 +487,8 @@ function checkUnlocks(silent){
 
 /* ---------- pipelines ---------- */
 function pMods(o){const p=PIPES[o.type];return [...p.mods,...p.up.slice(0,o.level-1)]}
-function runCost(o){return Math.round(PIPES[o.type].run*(1+.5*(o.level-1)))}
+function fullOn(o){return o.full&&!o.released}
+function runCost(o){return Math.round(PIPES[o.type].run*(1+.5*(o.level-1)))*(fullOn(o)?3:1)}
 function commTarget(o){return PIPES[o.type].draw*13*o.level*Math.pow(clamp(S.rep,20,100)/60,1.5)}
 function upCost(o){return Math.round(PIPES[o.type].cost*.6*o.level)}
 function upMod(o){return o.level<3?PIPES[o.type].up[o.level-1]:null}
@@ -588,9 +591,15 @@ function upgradePipe(id){
   post('#announcements',BOT,`🚀 nf-core/${o.type} ${ver(o)} is out, now using \`${PIPES[o.type].up[o.level-2]}\`. More users and more samples at once, a bit more to maintain.`);
   floater(o.c+1,o.r,'🚀 '+ver(o),'#FFE08A');
 }
+const CI_BURN=2.5;
+function ciPerHour(o){return CI_BURN*PIPES[o.type].upkeep*(1+.25*(o.level-1))*(o.broken?2:1)}
 function updPipes(dt){
   for(const o of S.objs){
-    if(o.kind!=='pipe'||!o.released)continue;
+    if(o.kind!=='pipe')continue;
+    // every built pipeline burns CI minutes, red ones re-run and burn double
+    o.ciAcc=(o.ciAcc||0)+ciPerHour(o)*dt/(DAY_LEN/12);
+    if(o.ciAcc>=1){const c=Math.floor(o.ciAcc);o.ciAcc-=c;spend('CI minutes',c);o.today=(o.today||0)-c}
+    if(!o.released)continue;
     if(o.broken){
       o.comm=Math.max(0,o.comm-o.comm*.012*dt);
       o.issueT-=dt;if(o.issueT<=0){o.issueT=rnd(18,28);post('#pipelines',{name:pick(OUTSIDERS),av:'🌍',col:'#5C7C8A'},`Issue opened on nf-core/${o.type}: "${pick(ISSUES)}"`)}
@@ -598,20 +607,21 @@ function updPipes(dt){
     const inc=o.comm*.012*dt;earn('Pipeline users',inc);o.today=(o.today||0)+inc;o.uAcc=(o.uAcc||0)+inc;if(o.uAcc>=4){floater(o.c+1,o.r,'👥 +'+Math.round(o.uAcc),'#FFE08A');o.uAcc=0}
   }
 }
-function perHour(slots,net){return Math.round(slots*net*1.5)}
+function perHour(slots,net){return sgn(slots*net*1.5)}
 function fp(p){return `<span class="fp" aria-label="${p.w} by ${p.h} tiles" style="grid-template-columns:repeat(${p.w},9px)">${'<i></i>'.repeat(p.w*p.h)}</span>`}
 function pipeProfile(k){
-  const p=PIPES[k],lvl=(v,a,b)=>v<=a?'low':v<=b?'med':'high',pay=Math.round(p.run*1.6+2);
-  return `<div class="pills"><span class="pill" title="Samples it can run at once">🧪 ${p.slots}</span><span class="pill" title="Credits an hour when every slot is busy">🪙 +${perHour(p.slots,pay-p.run)}/h</span><span class="pill" title="Upkeep: how often its CI breaks">🔧 ${lvl(p.upkeep,.85,1.15)}</span><span class="pill" title="Outside users once released">👥 ${lvl(p.draw,1.5,2.5)}</span><span class="pill" title="Hackers in this field enjoy it more">${FIELDS[p.field].label}</span></div>`;
+  const p=PIPES[k],lvl=(v,a,b)=>v<=a?'low':v<=b?'med':'high';
+  return `<div class="pills"><span class="pill" title="Samples it can run at once">🧪 ${p.slots}</span><span class="pill" title="Credits an hour from test runs before v1.0.0, then after release">🪙 ${perHour(p.slots,payOf(k,1,false)-p.run)} → ${perHour(p.slots,payOf(k,1,true)-p.run)}/h</span><span class="pill" title="CI minutes it burns every hour once built, and how often its CI breaks">🔧 −${Math.round(CI_BURN*p.upkeep)}/h, ${lvl(p.upkeep,.85,1.15)}</span><span class="pill" title="Outside users once released">👥 ${lvl(p.draw,1.5,2.5)}</span><span class="pill" title="Hackers in this field enjoy it more">${FIELDS[p.field].label}</span></div>`;
 }
 function pipeStatus(o){
   const p=PIPES[o.type];
-  return `<div class="pills"><span class="pill ${o.broken?'bad':'ok'}">${o.broken?'❌ red':'✅ green'}</span><span class="pill" title="${o.released?'Released version':'Green runs until v1.0.0'}">${o.released?ver(o):`${Math.min(o.green,p.rel)}/${p.rel} to v1`}</span><span class="pill" title="Samples running now">🧪 ${o.users}/${cap(o)}</span><span class="pill" title="Credits an hour when every slot is busy">🪙 +${perHour(cap(o),runPay(o)-runCost(o))}/h</span>${o.released?`<span class="pill" title="Outside users, paying while CI is green">👥 ${Math.round(o.comm)}</span>`:''}<span class="pill" title="Earned today">${sgn(o.today||0)} today</span></div>`;
+  return `<div class="pills"><span class="pill ${o.broken?'bad':'ok'}">${o.broken?'❌ red':'✅ green'}</span><span class="pill" title="${o.released?'Released version':'Green runs until v1.0.0'}">${o.released?ver(o):`${Math.min(o.green,p.rel)}/${p.rel} to v1`}</span><span class="pill" title="Samples running now">🧪 ${o.users}/${cap(o)}</span><span class="pill" title="Credits an hour when every slot is busy${o.released?'':'. Runs only pay properly after v1.0.0'}">🪙 ${perHour(cap(o),runPay(o)-runCost(o))}/h</span><span class="pill" title="CI minutes burned every hour${o.broken?', doubled while red':''}">🔧 −${Math.round(ciPerHour(o))}/h</span>${o.released?`<span class="pill" title="Outside users, paying while CI is green">👥 ${Math.round(o.comm)}</span>`:''}<span class="pill" title="Earned today">${sgn(o.today||0)} today</span></div>`;
 }
 function pipeButtons(o){
   const p=PIPES[o.type];let b='';
   if(o.broken)b+=o.claimed?`<span class="hint" style="margin:0">${fixLabel({kind:'pipe',ref:o.id})||'Someone is on it'}</span>`:`<button class="btn small primary" data-act="assign" data-arg="pipe:${o.id}">Send a hacker</button>`;
   else if(!o.released&&o.green>=p.rel)b+=`<button class="btn small primary" data-act="release" data-arg="${o.id}">Release v1.0.0</button>`;
+  if(!o.released&&o.green<p.rel)b+=`<button class="btn small" data-act="profile" data-arg="${o.id}" aria-pressed="${!!o.full}" title="test_full: 3× compute per run, counts as 2 green runs, breaks CI more often. Gets to v1.0.0 sooner, costs more.">-profile ${o.full?'test_full':'test'}</button>`;
   if(o.released&&o.level<3)b+=`<button class="btn small" data-act="upgrade" data-arg="${o.id}" title="Needs ${esc(upMod(o))}" ${canUpgrade(o)?'':'disabled'}>Upgrade to v${o.level+1} 🪙${upCost(o)}</button>`;
   return b;
 }
@@ -717,9 +727,9 @@ const EVENTS=[
       {label:'Ask a hacker to set up a mirror',fn:()=>{const r=startTask('Setting up a Docker Hub mirror',14,()=>{const was=S.slow>0;S.slow=0;post('#help',CORE,was?'Mirror is up. Test profiles are back to full speed.':'Mirror is up, though the limit had already reset on its own.')});if(r)S.slow=long?70:15;return r}},
       {label:'Wait it out',fn:()=>{S.slow=long?70:15;later(S.slow,()=>post('#help',CORE,'The rate limit has reset. Test profiles are back to normal speed.'))}}]}},
   ()=>{const fit=Math.random()<.55;return {ch:'#hackathon',user:CORE,
-    text:`A sponsor offers 200 credits for a 5 minute lightning talk in the main room. Their brief ${tell(fit,'is about running nf-core pipelines on their cloud','mentions "synergy" three times and has no technical content')}.`,
+    text:`A sponsor offers 150 credits for a 5 minute lightning talk in the main room. Their brief ${tell(fit,'is about running nf-core pipelines on their cloud','mentions "synergy" three times and has no technical content')}.`,
     actions:[
-      {label:'Ask a hacker to give the talk (+200 when done)',fn:()=>startTask('Preparing a lightning talk',15,()=>{earn('Sponsor talk',200);if(fit){allH(h=>h.needs.fun=clamp(h.needs.fun+10));followUp('#hackathon',CORE,'The talk went down well. People are asking about the cloud credits.')}else{allH(h=>{h.frust=clamp(h.frust+15);h.work=Math.max(0,h.work-30)});S.rep=clamp(S.rep-8);followUp('#random',rh(),'that was 5 minutes of my life I will never get back. Lost my train of thought too')}})},
+      {label:'Ask a hacker to give the talk (+150 when done)',fn:()=>startTask('Preparing a lightning talk',15,()=>{earn('Sponsor talk',150);if(fit){allH(h=>h.needs.fun=clamp(h.needs.fun+10));followUp('#hackathon',CORE,'The talk went down well. People are asking about the cloud credits.')}else{allH(h=>{h.frust=clamp(h.frust+15);h.work=Math.max(0,h.work-30)});S.rep=clamp(S.rep-8);followUp('#random',rh(),'that was 5 minutes of my life I will never get back. Lost my train of thought too')}})},
       {label:'Too busy',fn:()=>{}}]}},
   askEvent,
   ()=>{const real=Math.random()<.5;const pipes=S.objs.filter(o=>o.kind==='pipe');const tgt=pipes.length?pick(pipes):null;const where=tgt?'nf-core/'+tgt.type:'the modules repo';return {ch:'#pipelines',user:BOT,
@@ -751,15 +761,20 @@ const EVENTS=[
     text:`Opened one PR that touches 300 modules at once. Notes: ${tell(bad,'regex find and replace, did not run the tests','scripted bump, all module tests pass')}.`,
     actions:[
       {label:'Ask a hacker to review it',fn:()=>startTask('Reviewing a 300 module PR',20,()=>{if(bad){S.stars+=5;post('#modules',GH,'The review caught a broken regex in dozens of modules. Sent back, nothing merged.')}else{S.merged+=3;S.dayMerged+=3;S.stars+=10;post('#modules',GH,'Thorough review, clean PR. Merged.')}})},
-      {label:'LGTM 👍',fn:()=>{S.merged+=3;S.dayMerged+=3;if(bad){const owned=NEEDED.filter(m=>S.mods.has(m)&&!S.badMods.has(m));for(let i=0;i<2&&owned.length;i++){const m=owned.splice(Math.floor(Math.random()*owned.length),1)[0];later(rnd(15,40),()=>breakModule(m,'a bug from the 300 module PR'))}}}}]}}
+      {label:'LGTM 👍',fn:()=>{S.merged+=3;S.dayMerged+=3;if(bad){const owned=NEEDED.filter(m=>S.mods.has(m)&&!S.badMods.has(m));for(let i=0;i<2&&owned.length;i++){const m=owned.splice(Math.floor(Math.random()*owned.length),1)[0];later(rnd(15,40),()=>breakModule(m,'a bug from the 300 module PR'))}}}}]}},
+  ()=>{const big=Math.random()<.5;return {ch:'#modules',user:rh(),
+    text:`Review comment on my module: "please Harshil-align this". ${tell(big,'It is a 40 line input block full of `=` signs.','It is three lines.')}`,
+    actions:[
+      {label:'Ask a hacker to align it',fn:()=>startTask('Harshil-aligning a main.nf',big?14:4,()=>{S.stars+=big?12:4;allH(h=>h.needs.fun=clamp(h.needs.fun+(big?10:3)));post('#modules',BOT,big?'📏 Forty lines, every `=` in one column. Reviewers are moved.':'📏 Aligned. That took less time than this thread.')})},
+      {label:'Merge it unaligned',fn:()=>{S.rep=clamp(S.rep-(big?3:6));followUp('#modules',rh(),big?'fair, 40 lines was a lot. Someone will align it at the next hackathon':'it was three lines 😭')}}]}}
 ];
 function fireE(fn){const e=fn();const m=post(e.ch,e.user,e.text,e.actions);m.auto=e.actions.length-1}
 function prog(){return S.day-1+Math.min(S.t,DAY_LEN)/DAY_LEN}
 function diff(){const p=prog();return p<1.75?.3+.04*p:.37+(p-1.75)*0.3+Math.max(0,p-4.5)**2*0.07}
-const EVENT_TIER=[1,2,0,1,0,0,2,0,0,0,1,2];
+const EVENT_TIER=[1,2,0,1,0,0,2,0,0,0,1,2,0];
 const TIER_NOTES={1:'Late tomorrow things start to pick up: conda trouble, Docker Hub limits, flaky Wi-Fi, and modules breaking upstream.',2:'From tomorrow: template syncs, lint sweeps and enormous PRs. It keeps getting busier from here.'};
 function fireEvent(){const p=prog();fireE(pick(EVENTS.filter((e,i)=>[0,1.75,2.4][EVENT_TIER[i]]<=p)))}
-const HAPPY=['just got my first green CI tick 🥹','TIL `-resume` can save an entire afternoon','`nf-core pipelines lint` passed first time. Is this a dream?','anyone want to pair on a stub test?','meta maps finally clicked for me','nf-test snapshots updated, all green 🟢','who knew a tuple could cause so many feelings','the hex stickers are going fast, get yours','my first module got merged and I am telling my mum'];
+const HAPPY=['just got my first green CI tick 🥹','TIL `-resume` can save an entire afternoon','`nf-core pipelines lint` passed first time. Is this a dream?','anyone want to pair on a stub test?','meta maps finally clicked for me','nf-test snapshots updated, all green 🟢','who knew a tuple could cause so many feelings','the hex stickers are going fast, get yours','my first module got merged and I am telling my mum','every pipeline ends in MultiQC eventually 📊','Harshil-aligned my whole config. It is beautiful','`-resume` just saved me four hours of STAR','watched a bytesize talk on nf-test, feeling powerful','`nf-core modules create` did half my job for me','who deleted the work directory 😱','the `versions.yml` bit finally makes sense'];
 const COMPLAIN={caffeine:'the coffee queue is longer than my sarek run ☕',hunger:'is the pizza a myth?',energy:'I need a beanbag and a nap',fun:'bored. Anyone got a pipeline that needs testing?'};
 function chatter(){
   const live=S.hackers.filter(h=>h.state!=='leave');if(!live.length)return;
@@ -799,7 +814,8 @@ function spend(src,a){earn(src,-a)}
 function rate(){const t=nowT();S.recent=S.recent.filter(r=>t-r[0]<25);return S.recent.reduce((s,r)=>s+r[1],0)/25*(DAY_LEN/12)}
 function sgn(v){return (v>=0?'+':'−')+Math.round(Math.abs(v))}
 function rateStr(){return sgn(rate())+'/h'}
-function runPay(o){return Math.round((PIPES[o.type].run*1.6+2)*(1+.6*(o.level-1))*(o.released?1.25:1))}
+function payOf(k,level,released){return Math.round((PIPES[k].run*1.6+2)*(1+.6*(level-1))*(released?1.25:.4))}
+function runPay(o){return payOf(o.type,o.level,o.released)*(fullOn(o)?2:1)}
 function ledgerRows(){return Object.entries(S.today).filter(([,v])=>Math.abs(v)>=.5).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span>${k}</span><b style="color:${v>=0?'var(--accent)':'var(--bad)'}">${sgn(v)}</b>`).join('')}
 function ledgerCard(){
   const net=Object.values(S.today).reduce((a,b)=>a+b,0),pipes=S.objs.filter(o=>o.kind==='pipe');
@@ -814,7 +830,7 @@ function floater(x,y,text,col){S.floaters.push({x,y,text,col,life:1.6});if(S.flo
 /* ---------- days ---------- */
 function endDay(){
   S.paused=true;
-  const staffCost=S.staff.length*40, grant=Math.max(50,200-15*S.dayLeft);
+  const staffCost=S.staff.length*40, grant=Math.max(0,Math.round(S.rep*2.5)-15*S.dayLeft);
   earn('Sponsor grant',grant);if(staffCost)spend('Salaries',staffCost);
   if(S.credits<0)S.debtDays++;else S.debtDays=0;
   if(S.debtDays>=2){lose('bankrupt');return}
@@ -823,7 +839,8 @@ function endDay(){
   const nu=TIER_NOTES[S.day]||'Tomorrow will be a little busier again.';
   showModal(`<h2 class="px">Day ${S.day} wrapped</h2>
     <div class="score"><span>Modules merged today</span><b>${S.dayMerged}</b>
-    <span>Hackers who left unhappy (each cuts the grant by 15)</span><b>${S.dayLeft}</b></div>
+    <span>Hackers who left unhappy</span><b>${S.dayLeft}</b></div>
+    <p class="hint">The sponsor grant is 2.5 × reputation, minus 15 for each hacker who left unhappy.</p>
     <div class="score">${ledgerRows()}<span class="tot">Net today</span><b class="tot">${sgn(Object.values(S.today).reduce((a,b)=>a+b,0))}</b>
     <span>Credits now</span><b>${Math.round(S.credits)}</b></div>
     <div class="score"><span>Running score</span><b>${sc}</b><span>Best score</span><b>${best}</b></div>
@@ -838,10 +855,11 @@ function nextDay(){
   post('#hackathon',BOT,`Good morning and welcome to day ${S.day}! ☀️`);
   hideModal();S.paused=false;
 }
-function score(){
-  const hap=S.hapN?S.hapSum/S.hapN:0;
-  return S.merged*10+S.released*150+S.stars+Math.round(hap*3)+Math.round(Math.max(0,S.credits)/10)+Math.round(S.objs.reduce((t,o)=>t+(o.comm||0),0));
+function scoreParts(){
+  const hap=S.hapN?S.hapSum/S.hapN:0,users=Math.round(S.objs.reduce((t,o)=>t+(o.comm||0),0));
+  return [['Modules merged',S.merged,S.merged*10],['Pipelines released',S.released,S.released*150],['GitHub stars',S.stars,S.stars],['Pipeline users',users,users],['Average happiness',Math.round(hap)+'%',Math.round(hap*3)],['Credits left',Math.round(S.credits),Math.round(Math.max(0,S.credits)/10)]];
 }
+function score(){return scoreParts().reduce((s,p)=>s+p[2],0)}
 /* ---------- losing ---------- */
 const MELT_LIMIT=60,EMPTY_LIMIT=40,REP_FLOOR=30,REP_DAYS=.6;
 const LOSE={
@@ -875,9 +893,7 @@ function dangerChips(){
 function lose(r){if(S.over)return;S.paused=true;endGame(r)}
 function endGame(reason){
   S.over=true;
-  const hap=S.hapN?S.hapSum/S.hapN:0;
-  const parts=[['Modules merged',S.merged,S.merged*10],['Pipelines released',S.released,S.released*150],['GitHub stars',S.stars,S.stars],['Average happiness',Math.round(hap)+'%',Math.round(hap*3)],['Credits left',Math.round(S.credits),Math.round(Math.max(0,S.credits)/10)]];
-  const total=parts.reduce((s,p)=>s+p[2],0);
+  const parts=scoreParts(),total=score();
   let best=0;try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(total>best)localStorage.setItem('nfcore-hackathon-best',total)}catch(e){}
   const [title,why]=LOSE[reason]||['Hackathon over',''];
   showModal(`<h2 class="px">${title}</h2><p>${why} You lasted until day ${S.day}, ${clockStr()}.</p>
@@ -893,9 +909,10 @@ function intro(){
   <p>Run an nf-core hackathon for as long as you can.</p>
   <ul>
     <li>Hackers write modules at 💻 tables. Review their PRs in Slack: rushed ones break CI later.</li>
-    <li>Merge a pipeline's modules, then build it. Green runs pay, and bigger pipelines pay more.</li>
-    <li>Red CI needs a person. Send a hacker, or hire a maintainer.</li>
-    <li>Keep everyone fed, caffeinated and happy. It starts calm and gets chaotic. Red warnings up top mean you're close to losing.</li>
+    <li>Merge a pipeline's modules, then build it. Each built pipeline burns CI minutes, and test runs cost compute until you release v1.0.0. After that, runs and outside users pay.</li>
+    <li>Red CI needs a person. Send a hacker, or hire a maintainer. Failed runs still burn compute.</li>
+    <li>Keep everyone fed, caffeinated and happy. The sponsor grant each night follows your reputation.</li>
+    <li>Don't build everything at once. End two days in a row in debt and the hackathon is over.</li>
   </ul>
   <button class="btn primary" data-act="start">Start the hackathon</button>`);
 }
@@ -1054,6 +1071,7 @@ document.addEventListener('click',e=>{
     case 'assign':{const [k,r]=arg.split(':');const j={kind:k,ref:k==='pipe'?+r:r};if(!stillBroken(j))break;if(!assignFix(j))note('Nobody is free to fix it right now.');break}
     case 'upgrade':upgradePipe(+arg);break;
     case 'release':releasePipe(+arg);break;
+    case 'profile':{const o=objById(+arg);if(o)o.full=!o.full;break}
     case 'remove':{const o=objById(+arg);if(o){earn('Refunds',Math.floor((o.kind==='pipe'?PIPES[o.type].cost:FAC[o.type].cost)/2));removeObj(o);S.sel=null}break}
     case 'hire':hire(arg);break;
     case 'ledger':S.sel=S.sel&&S.sel.t==='ledger'?null:{t:'ledger'};break;
@@ -1061,7 +1079,14 @@ document.addEventListener('click',e=>{
   }
   updateHUD();updateModebar();renderPanel(true);renderInspect(true);renderCI();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){S.mode=null;S.sel=null;updateModebar();renderInspect(true)}if((e.key==='r'||e.key==='R')&&S.mode&&S.mode.kind==='pipe'){S.mode.rot=!S.mode.rot;updateModebar()}});
+let typed='';
+const EGGS={
+  resume:()=>{earn('Cached work dir',40);note('💾 -resume: found a cached work directory. +40 credits.')},
+  harshil:()=>{S.stars+=5;note('📏 Everything on this floor is now perfectly aligned. +5 ⭐')},
+  hackathon:()=>{allH(h=>h.needs.fun=clamp(h.needs.fun+15));note('🎉 Someone put on the hackathon playlist. Fun +15.')}};
+document.addEventListener('keydown',e=>{
+  if(e.key.length===1&&!S.over){typed=(typed+e.key.toLowerCase()).slice(-12);for(const k in EGGS)if(typed.endsWith(k)&&!S['egg_'+k]){S['egg_'+k]=1;EGGS[k]();updateHUD()}}
+  if(e.key==='Escape'){S.mode=null;S.sel=null;updateModebar();renderInspect(true)}if((e.key==='r'||e.key==='R')&&S.mode&&S.mode.kind==='pipe'){S.mode.rot=!S.mode.rot;updateModebar()}});
 
 /* ---------- UI ---------- */
 const lastHTML={};
@@ -1095,7 +1120,7 @@ function renderPanel(force){
   const p=$('#panel');let html='';
   const chip=m=>`<span class="chip ${S.mods.has(m)?'ok':''}${S.badMods.has(m)?' bad':''}" title="${S.badMods.has(m)?'Red CI':S.mods.has(m)?'Merged':'Not merged yet'}">${esc(m)}</span>`;
   if(S.tab==='build'){
-    html=`<div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><small>🪙${f.cost}</small></button>`).join('')+`</div>`;
+    html=`<p class="hint">${goalHint()}</p><div class="grid-build">`+Object.entries(FAC).map(([k,f])=>`<button class="btn bitem" data-act="build" data-arg="${k}" title="${f.desc}" aria-pressed="${!!(S.mode&&S.mode.type===k)}" ${S.credits<f.cost?'disabled':''}><span class="ic">${f.icon}</span><b>${f.label}</b><small>🪙${f.cost}</small></button>`).join('')+`</div>`;
   }else if(S.tab==='pipes'){
     html=Object.entries(PIPES).map(([k,pp])=>{
       const built=S.objs.find(o=>o.kind==='pipe'&&o.type===k);
@@ -1121,6 +1146,14 @@ function renderPanel(force){
   }
   setHTML(p,'panel',html,false);
   lastHTML.tab!==S.tab&&(lastHTML.tab=S.tab,p.scrollTop=0);
+}
+/* nudge towards the next pipeline so new players save for it */
+function goalHint(){
+  const next=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).sort((a,b)=>a[1].mods.filter(m=>!S.mods.has(m)).length-b[1].mods.filter(m=>!S.mods.has(m)).length||a[1].cost-b[1].cost)[0];
+  if(!next)return 'Every pipeline is built. Keep them green and release them.';
+  const [k,p]=next,miss=p.mods.filter(m=>!S.mods.has(m)),short=p.cost-Math.round(S.credits);
+  if(miss.length)return `🎯 Next: nf-core/${k} needs ${miss.map(m=>`<code>${esc(m)}</code>`).join(', ')}. Keep 🪙${p.cost} spare to build it.`;
+  return short>0?`🎯 nf-core/${k} is ready. You need ${short} more credits to build it.`:`🎯 nf-core/${k} is ready to build in the Pipelines tab (🪙${p.cost}).`;
 }
 function bar(label,v,col){return `<span>${label}</span><div class="bar"><i style="width:${Math.round(v)}%;background:${col}"></i></div><span>${Math.round(v)}</span>`}
 function renderInspect(force){
