@@ -165,6 +165,23 @@ button.kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .card.hk{margin:0}
 .card.hk .hint{margin:0 0 6px}
 .card.hk.locked{opacity:.7}
+#cloud{max-width:540px;max-height:calc(100dvh - 32px);width:calc(100% - 32px)}
+#cloud::backdrop{background:rgba(10,20,15,.6)}
+#cloud h2{font-size:20px;text-wrap:balance}
+#cloud h3{margin:0 0 6px;font-size:16px}
+#cloud p{text-wrap:pretty}
+#cloud input{box-sizing:border-box;font:inherit;font-size:16px;width:100%;padding:8px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);margin:4px 0 8px}
+#cloud input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#cloud .cloud-head{display:flex;gap:12px;align-items:start;justify-content:space-between;margin-bottom:12px}
+#cloud .cloud-head h2{margin:0}
+#cloud-status{min-height:22px;margin:10px 0}
+#cloud-status[data-error="true"]{color:var(--bad)}
+#cloud table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+#cloud th,#cloud td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+#cloud th:nth-child(2),#cloud td:nth-child(2){text-align:left;overflow-wrap:anywhere;max-width:160px}
+#cloud caption{text-align:left;color:var(--muted);font-size:13px;margin-bottom:8px}
+#cloud details{margin:12px 0}
+#cloud summary{cursor:pointer}
 @media (prefers-reduced-motion:reduce){.btn:active:not(:disabled){transform:none}.light.bad{animation:none}}
 </style>
 </head>
@@ -178,6 +195,7 @@ button.kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
       <button class="btn small" data-act="speed" data-arg="1" aria-label="Normal speed">▶</button>
       <button class="btn small" data-act="speed" data-arg="3" aria-label="Fast">⏩</button>
     </div>
+    <button class="btn small" data-cloud="open">Save &amp; scores</button>
     <div class="stats" id="stats"></div>
   </header>
   <div id="cibar" aria-live="polite"></div>
@@ -198,6 +216,38 @@ button.kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   </div>
 </div>
 <div id="overlay"></div>
+<dialog id="cloud" class="modal" aria-labelledby="cloud-title">
+  <div class="cloud-head"><h2 class="px" id="cloud-title">Save &amp; scores</h2><button class="btn small" data-cloud="close" autofocus>Close</button></div>
+  <section class="card" aria-labelledby="save-title">
+    <h3 id="save-title">Your cloud save</h3>
+    <p class="hint">One save slot. Save before you leave, then load it on any device with your private recovery code.</p>
+    <div class="row"><button class="btn primary" data-cloud="save">Save game</button><button class="btn" data-cloud="load">Load game</button></div>
+    <p id="cloud-status" role="status" aria-live="polite"></p>
+    <details id="recovery-details"><summary>Recovery code &amp; another device</summary>
+      <p class="hint">Keep your code somewhere safe. Anyone with it can load or replace your save and submit scores as you. There is no email recovery.</p>
+      <label for="recovery-code">This browser’s private code</label>
+      <input id="recovery-code" type="password" readonly autocomplete="off" spellcheck="false">
+      <button class="btn small" data-cloud="reveal">Show code</button>
+      <form id="recover-form">
+        <label for="recover-code">Use a code from another device</label>
+        <input id="recover-code" type="password" required minlength="64" maxlength="64" pattern="[0-9a-fA-F]{64}" autocomplete="off" spellcheck="false">
+        <button class="btn small" type="submit">Connect saved game</button>
+      </form>
+    </details>
+  </section>
+  <section aria-labelledby="leaderboard-title">
+    <div class="cloud-head"><h3 id="leaderboard-title">High scores</h3><button class="btn small" data-cloud="refresh">Refresh</button></div>
+    <p class="hint">Top 20 · best score per player · unverified, just for fun.</p>
+    <form id="score-form">
+      <label for="player-name">Public player name</label>
+      <input id="player-name" required maxlength="24" placeholder="e.g. pipeline_pioneer" autocomplete="nickname">
+      <button class="btn" type="submit" id="submit-score">Submit finished game</button>
+      <p class="hint" id="score-hint">Finish a hackathon to submit your score.</p>
+    </form>
+    <p id="score-status" role="status" aria-live="polite"></p>
+    <div id="leaderboard" aria-live="polite"></div>
+  </section>
+</dialog>
 
 <script>
 "use strict";
@@ -238,18 +288,28 @@ const VENUE={name:'venue',av:'🏢',col:'#8A6D3B'};
 const RED_REASONS=['nf-test snapshot mismatch','conda solve timed out','a container tag went missing','lint: meta.yml missing a field','stub run failed','MultiQC report changed by one pixel'];
 
 const $=s=>document.querySelector(s);
-const rnd=(a,b)=>a+Math.random()*(b-a);
-const pick=a=>a[Math.floor(Math.random()*a.length)];
+const rnd=(a,b)=>a+random()*(b-a);
+const pick=a=>a[Math.floor(random()*a.length)];
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>');
 const inb=(c,r)=>c>=0&&r>=0&&c<COLS&&r<ROWS;
 
 let S, T=30;
+let replay, randomState, replaying=false, accumulator=0;
+// Mulberry32: a saved seed and fixed simulation steps recreate closures as well as data.
+function random(){
+  randomState=(randomState+0x6D2B79F5)>>>0;
+  let t=randomState;
+  t=Math.imul(t^(t>>>15),t|1);
+  t^=t+Math.imul(t^(t>>>7),t|61);
+  return ((t^(t>>>14))>>>0)/4294967296;
+}
 const canvas=$('#map'), ctx=canvas.getContext('2d');
 
 /* ---------- setup ---------- */
-function newGame(){
+function newGame(seed=crypto.getRandomValues(new Uint32Array(1))[0]){
+  replay={version:1,seed,steps:0,commands:[]};randomState=seed;accumulator=0;
   S={credits:550,stars:0,merged:0,released:0,day:1,t:0,speed:1,paused:true,over:false,
     grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
     objs:[],hackers:[],staff:[],mods:new Set(['fastqc','multiqc']),prs:[],slack:[],unread:0,
@@ -340,7 +400,7 @@ function spawnHacker(){
   const [dc,dr]=pick(DOOR);
   const h={id:nid(),name,x:dc+.5,y:dr+.5,path:[],state:'idle',wait:0,target:null,useT:0,
     needs:{caffeine:rnd(55,90),hunger:rnd(60,95),energy:rnd(70,100),fun:rnd(55,85)},
-    frust:rnd(0,15),work:rnd(0,30),low:0,shirt:pick(SHIRTS),doing:'Arriving',bob:Math.random()*6,field:pick(Object.keys(FIELDS)),job:null};
+    frust:rnd(0,15),work:rnd(0,30),low:0,shirt:pick(SHIRTS),doing:'Arriving',bob:random()*6,field:pick(Object.keys(FIELDS)),job:null};
   S.hackers.push(h);
   return h;
 }
@@ -358,12 +418,12 @@ function chooseTarget(h){
     if(!cands.length){h.frust=clamp(h.frust+6);h.unmet=k}
   }
   if(!cands.length){
-    cands=Math.random()<.65?S.objs.filter(o=>o.type==='table'):S.objs.filter(o=>o.kind==='pipe');
+    cands=random()<.65?S.objs.filter(o=>o.type==='table'):S.objs.filter(o=>o.kind==='pipe');
     if(!cands.length)cands=S.objs.filter(o=>o.type==='table');
   }
   cands=cands.filter(o=>o.users<cap(o));
   let best=null,bd=1e9,bk=-1;
-  for(const o of cands)for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+Math.random()*3-(o.kind==='pipe'&&PIPES[o.type].field===h.field?4:0);if(sc<bd){bd=sc;best=o;bk=k}}
+  for(const o of cands)for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+random()*3-(o.kind==='pipe'&&PIPES[o.type].field===h.field?4:0);if(sc<bd){bd=sc;best=o;bk=k}}
   if(best){best.users++;h.target=best.id;h.path=pathFrom(prev,s,bk);h.state='walk';h.doing='Heading to '+objName(best);return}
   // wander
   const opts=[];for(let k=0;k<d.length;k++)if(d[k]>0&&d[k]<7)opts.push(k);
@@ -436,21 +496,21 @@ function finishRun(h,o){
     if(S.credits>0){const c=runCost(o);spend('Failed runs',c);o.today=(o.today||0)-c}
     h.frust=clamp(h.frust+18);h.needs.fun=clamp(h.needs.fun+5);
     floater(h.x,h.y,'❌ CI red','#FF8A80');
-    if(Math.random()<.2)post('#pipelines',huser(h),pick([`is anyone looking at the red CI on nf-core/${o.type}?`,`nf-core/${o.type} is broken and I have a demo in an hour 😬`,`tried nf-core/${o.type}, got a wall of red`]));
+    if(random()<.2)post('#pipelines',huser(h),pick([`is anyone looking at the red CI on nf-core/${o.type}?`,`nf-core/${o.type} is broken and I have a demo in an hour 😬`,`tried nf-core/${o.type}, got a wall of red`]));
     return;
   }
   const cost=runCost(o);
   if(S.credits<cost){
     h.frust=clamp(h.frust+6);floater(h.x,h.y,'no compute','#FF8A80');
-    if(Math.random()<.15)post('#pipelines',huser(h),`nf-core/${o.type} won't launch, we're out of compute credits`);
+    if(random()<.15)post('#pipelines',huser(h),`nf-core/${o.type} won't launch, we're out of compute credits`);
     return;
   }
   spend('Compute',cost);const pay=runPay(o);earn('Pipeline runs',pay);o.today=(o.today||0)+pay-cost;
   h.needs.fun=clamp(h.needs.fun+p.fun*(1+.2*(o.level-1))*(p.field===h.field?1.4:1));o.runs++;o.green+=fullOn(o)?2:1;
   floater(o.c+1,o.r+.3,'+'+(pay-cost),'#FFE08A');
   const badIn=pMods(o).filter(m=>S.badMods.has(m));
-  if(Math.random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))*(fullOn(o)?1.5:1)+S.breakMod+.02*S.drift+.1*badIn.length){
-    if(badIn.length&&Math.random()<.75){const m=pick(badIn);breakPipe(o,`it uses \`${m}\`, which is red`,m)}
+  if(random()<(.004+.03*Math.min(diff(),2.5)**1.5)*p.upkeep*(1+.25*(o.level-1))*(fullOn(o)?1.5:1)+S.breakMod+.02*S.drift+.1*badIn.length){
+    if(badIn.length&&random()<.75){const m=pick(badIn);breakPipe(o,`it uses \`${m}\`, which is red`,m)}
     else breakPipe(o,pick(RED_REASONS));
   }
 }
@@ -474,12 +534,12 @@ function pickMod(){
   const want=NEEDED.filter(m=>!S.mods.has(m)&&!pending.has(m));
   // hackers gravitate to whichever unbuilt pipeline is closest to complete
   const close=Object.entries(PIPES).filter(([k])=>!S.objs.some(o=>o.type===k)).map(([k,p])=>({p,miss:p.mods.filter(m=>want.includes(m))})).filter(x=>x.miss.length).sort((a,b)=>a.miss.length-b.miss.length||a.p.cost-b.p.cost)[0];
-  return close&&(!S.unlocked.size||Math.random()<.6)?pick(close.miss):want.length&&Math.random()<.6?pick(want):pick(ALL_MODS);
+  return close&&(!S.unlocked.size||random()<.6)?pick(close.miss):want.length&&random()<.6?pick(want):pick(ALL_MODS);
 }
 function openPR(h){
   const mod=pickMod();
   const q=clamp(prQuality(h)+rnd(-.1,.1)+(1-Math.min(diff(),1))*.3,.05,.95);
-  const bad=Math.random()>q;
+  const bad=random()>q;
   const pr={id:nid(),mod,author:h.id,authorName:h.name,age:0,msg:null,q,bad,notes:makeNotes(bad)};
   S.prs.push(pr);
   floater(h.x,h.y-.3,'PR!','#B9F6CA');
@@ -489,7 +549,7 @@ function openPR(h){
 const GOOD_NOTES=['added nf-test snapshots','meta.yml is complete','stub test included','emits versions properly','lint passes locally','followed the module template'];
 const BAD_NOTES=['only tested on my laptop','meta.yml still has a TODO','no stub test yet','hardcoded a container tag','skipped lint, it was slow','copied from another module, mostly'];
 function prQuality(h){const n=h.needs;return clamp(.2+n.caffeine/100*.3+n.energy/100*.2-h.frust/100*.4+(mentorNear(h)?.25:0)-(h.newbie?.15:0),.05,.95)}
-function makeNotes(bad){const g=[...GOOD_NOTES],b=[...BAD_NOTES],out=[];for(let i=0;i<2;i++){const src=Math.random()<(bad?.25:.8)?g:b;out.push(src.splice(Math.floor(Math.random()*src.length),1)[0])}return out}
+function makeNotes(bad){const g=[...GOOD_NOTES],b=[...BAD_NOTES],out=[];for(let i=0;i<2;i++){const src=random()<(bad?.25:.8)?g:b;out.push(src.splice(Math.floor(random()*src.length),1)[0])}return out}
 function prMessage(pr,h,revised){
   const isNew=!S.mods.has(pr.mod);
   const lead=revised?`Addressed the review on \`${pr.mod}\`.`:`Opened a PR: ${isNew?'new module':'update to'} \`${pr.mod}\`.`;
@@ -518,7 +578,7 @@ function requestChanges(id,auto){
   }
   resolveMsg(pr.msg,auto?'Changes requested by '+(auto===true?'a maintainer':auto):'Changes requested');
   S.timers.push({t:12,fn:()=>{const a=S.hackers.find(x=>x.id===pr.author);if(!a||a.state==='leave')return;
-    const q=Math.min(.95,pr.q+.35),bad=Math.random()>q;
+    const q=Math.min(.95,pr.q+.35),bad=random()>q;
     const np={...pr,id:nid(),age:0,q,bad,notes:makeNotes(bad)};S.prs.push(np);
     prMessage(np,a,true);if(S.claudeOn)claudePR(np);}});
 }
@@ -699,7 +759,7 @@ function breakModule(m,reason){
   S.badMods.add(m);
   const msg=post('#modules',GH,`❌ Module CI red on \`${m}\`: ${reason}. Pipelines using it can't be built or upgraded, and built ones will go red.`,fixActions({kind:'mod',ref:m}),{noAuto:true});
   S.modMsg[m]=msg.id;
-  for(const o of S.objs)if(o.kind==='pipe'&&pMods(o).includes(m)&&Math.random()<.6)breakPipe(o,`it uses \`${m}\`, which is red`,m);
+  for(const o of S.objs)if(o.kind==='pipe'&&pMods(o).includes(m)&&random()<.6)breakPipe(o,`it uses \`${m}\`, which is red`,m);
 }
 function fixModule(m,who){
   if(!S.badMods.delete(m))return;
@@ -833,7 +893,7 @@ function updStaff(s,dt){
       const [c,r]=tileOf(s);const {d,prev,s:st}=bfs(c,r);
       if(s.type==='mentor'){
         let best=null,bd=1e9,bk=-1;
-        for(const o of S.objs.filter(o=>o.type==='table'))for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+Math.random()*6;if(sc<bd){bd=sc;best=o;bk=k}}
+        for(const o of S.objs.filter(o=>o.type==='table'))for(const [x,y] of adj(o)){const k=x+y*COLS;if(d[k]<0)continue;const sc=d[k]+random()*6;if(sc<bd){bd=sc;best=o;bk=k}}
         if(best){s.target=best.id;s.path=pathFrom(prev,st,bk);s.state='walk';break}
       }
       const opts=[];for(let k=0;k<d.length;k++)if(d[k]>0&&d[k]<5)opts.push(k);
@@ -873,12 +933,12 @@ function note(t){const el=$('#toast');el.textContent=t;el.style.display='block';
 function rh(){const a=S.hackers.filter(h=>h.state!=='leave');return a.length?huser(pick(a)):BOT}
 function allH(fn){for(const h of S.hackers)fn(h)}
 
-const tell=(v,a,b)=>Math.random()<.8?(v?a:b):(v?b:a);
+const tell=(v,a,b)=>random()<.8?(v?a:b):(v?b:a);
 function later(t,fn){S.timers.push({t,fn})}
 function followUp(ch,user,text,t){later(t||rnd(3,6),()=>post(ch,user,text))}
 const NEWCOMER={name:'curious_newcomer',av:'👋',col:'#7FC8F8'};
 function askEvent(){
-  if(S.docsBug===undefined)S.docsBug=Math.random()<.5;
+  if(S.docsBug===undefined)S.docsBug=random()<.5;
   const bug=S.docsBug;
   return {ch:'#help',user:rh(),
     text:`Another question about the same \`--outdir\` error. ${tell(bug,'They copied the example from the docs exactly.','They skipped the quickstart.')}`,
@@ -888,66 +948,66 @@ function askEvent(){
       {label:'Link the docs',fn:()=>{if(bug){allH(h=>h.frust=clamp(h.frust+10));later(30,()=>fireE(askEvent))}else S.rep=clamp(S.rep+2)}}]};
 }
 const EVENTS=[
-  ()=>{const major=Math.random()<.45;return {ch:'#modules',user:GH,
+  ()=>{const major=random()<.45;return {ch:'#modules',user:GH,
     text:`CI on the modules repo is red. Conda cannot solve the environment. The log points to ${tell(major,'a base image bump that hits every env','one niche tool pinned too tightly')}.`,
     actions:[
       {label:'Ask a hacker to pin versions',fn:()=>{const r=startTask('Pinning tool versions',12,()=>{S.breakMod=0;S.breakModT=0;post('#modules',GH,major?'Pinned. Good call, that bump would have broken half the repo.':'Pinned. It was only one tool, but CI is green.')});if(r&&major){S.breakMod=.1;S.breakModT=999}return r}},
       {label:'Ship it anyway',fn:()=>{if(major){S.breakMod=.2;S.breakModT=60;for(let i=0;i<2;i++){const ok=[...S.mods].filter(x=>!S.badMods.has(x));if(ok.length)breakModule(pick(ok),'conda base image bump')}}else{S.breakMod=.03;S.breakModT=30}followUp('#modules',GH,major?'The base image bump is breaking pipelines everywhere for the next minute.':'Only one tool was affected. Barely noticeable.')}}]}},
-  ()=>{const conflict=Math.random()<.5;return {ch:'#pipelines',user:BOT,
+  ()=>{const conflict=random()<.5;return {ch:'#pipelines',user:BOT,
     text:`Template sync PRs just opened on every pipeline. The diff ${tell(conflict,'touches modules.json and every config file','is small, mostly CI config')}.${S.drift?` ${S.drift} earlier sync${S.drift>1?'s are':' is'} still unmerged.`:''}`,
     actions:[
-      {label:'Merge them all',fn:()=>{S.stars+=10;S.drift=0;let n=0;if(conflict)for(const o of S.objs)if(o.kind==='pipe'&&Math.random()<.6&&breakPipe(o,'template sync merge conflict'))n++;
+      {label:'Merge them all',fn:()=>{S.stars+=10;S.drift=0;let n=0;if(conflict)for(const o of S.objs)if(o.kind==='pipe'&&random()<.6&&breakPipe(o,'template sync merge conflict'))n++;
         followUp('#pipelines',BOT,conflict?(n?`Merged. ${n} pipeline${n>1?'s':''} went red with merge conflicts.`:'Merged with conflicts, but no built pipeline was affected.'):'Merged cleanly. Everything is on the latest template.')}},
       {label:'Leave them for Monday',fn:()=>{S.drift++;allH(h=>h.frust=clamp(h.frust+3));followUp('#pipelines',BOT,`Template drift is now ${S.drift}. Each unmerged sync makes red CI more likely until the next merge.`)}}]}},
-  ()=>{const close=Math.random()<.55;return {ch:'#hackathon',user:VENUE,
+  ()=>{const close=random()<.55;return {ch:'#hackathon',user:VENUE,
     text:`The pizza delivery is running late. The driver ${tell(close,'says they are two streets away','has stopped answering the phone')}.`,
     actions:[
       {label:'Order backup pizza (−60)',cost:60,fn:()=>{allH(h=>h.needs.hunger=clamp(h.needs.hunger+40));followUp('#hackathon',VENUE,close?'The original order turned up five minutes later. Leftovers for breakfast.':'Good call. The original driver went to the wrong venue.')}},
       {label:'Wait and post a pizza GIF',fn:()=>{allH(h=>{h.needs.hunger=clamp(h.needs.hunger-(close?5:15));h.needs.fun=clamp(h.needs.fun+5)});
         if(close)later(15,()=>{allH(h=>h.needs.hunger=clamp(h.needs.hunger+40));post('#hackathon',VENUE,'🍕 Pizza is here!')});
         else later(60,()=>{allH(h=>{h.needs.hunger=clamp(h.needs.hunger+30);h.frust=clamp(h.frust+8)});post('#hackathon',VENUE,'🍕 The pizza finally arrived. Cold.')})}}]}},
-  ()=>{const long=Math.random()<.5;return {ch:'#help',user:rh(),
+  ()=>{const long=random()<.5;return {ch:'#help',user:rh(),
     text:`Docker Hub rate limit hit. Every test profile is crawling. ${tell(long,'We pulled 400 images in the last hour.','The limit should reset in a few minutes.')}`,
     actions:[
       {label:'Ask a hacker to set up a mirror',fn:()=>{const r=startTask('Setting up a Docker Hub mirror',14,()=>{const was=S.slow>0;S.slow=0;post('#help',CORE,was?'Mirror is up. Test profiles are back to full speed.':'Mirror is up, though the limit had already reset on its own.')});if(r)S.slow=long?70:15;return r}},
       {label:'Wait it out',fn:()=>{S.slow=long?70:15;later(S.slow,()=>post('#help',CORE,'The rate limit has reset. Test profiles are back to normal speed.'))}}]}},
-  ()=>{const fit=Math.random()<.55;return {ch:'#hackathon',user:CORE,
+  ()=>{const fit=random()<.55;return {ch:'#hackathon',user:CORE,
     text:`A sponsor offers 150 credits for a 5 minute lightning talk in the main room. Their brief ${tell(fit,'is about running nf-core pipelines on their cloud','mentions "synergy" three times and has no technical content')}.`,
     actions:[
       {label:'Ask a hacker to give the talk (+150 when done)',fn:()=>startTask('Preparing a lightning talk',15,()=>{earn('Sponsor talk',150);if(fit){allH(h=>h.needs.fun=clamp(h.needs.fun+10));followUp('#hackathon',CORE,'The talk went down well. People are asking about the cloud credits.')}else{allH(h=>{h.frust=clamp(h.frust+15);h.work=Math.max(0,h.work-30)});S.rep=clamp(S.rep-8);followUp('#random',rh(),'that was 5 minutes of my life I will never get back. Lost my train of thought too')}})},
       {label:'Too busy',fn:()=>{}}]}},
   askEvent,
-  ()=>{const real=Math.random()<.5;const pipes=S.objs.filter(o=>o.kind==='pipe');const tgt=pipes.length?pick(pipes):null;const where=tgt?'nf-core/'+tgt.type:'the modules repo';return {ch:'#pipelines',user:BOT,
+  ()=>{const real=random()<.5;const pipes=S.objs.filter(o=>o.kind==='pipe');const tgt=pipes.length?pick(pipes):null;const where=tgt?'nf-core/'+tgt.type:'the modules repo';return {ch:'#pipelines',user:BOT,
     text:`\`nf-core pipelines lint\` found 42 warnings on ${where}. They are ${tell(real,'spread across modules, about missing version outputs','all in one deprecated config file')}.`,
     actions:[
       {label:'Ask a hacker to fix them',fn:()=>startTask('Fixing lint warnings',real?16:8,()=>{S.stars+=real?15:5;post('#pipelines',BOT,real?'Fixed 42 real problems.':'They were mostly noise from an old config file. Cleaned up anyway.')},tgt&&tgt.id)},
       {label:'Silence them in .nf-core.yml',fn:()=>{if(real)later(rnd(20,45),()=>{if(tgt&&objById(tgt.id))breakPipe(tgt,'one of the silenced lint warnings was real');else{S.breakMod=.08;S.breakModT=40;post('#modules',GH,'One of the silenced lint warnings was real. Modules CI is flaky for a while.')}})}}]}},
-  ()=>{const heated=Math.random()<.45;return {ch:'#random',user:rh(),
+  ()=>{const heated=random()<.45;return {ch:'#random',user:rh(),
     text:`The tabs vs spaces thread now has 87 replies. ${tell(heated,'People are starting to get personal.','It is mostly memes.')}`,
     actions:[
       {label:'Weigh in',fn:()=>{if(heated){allH(h=>h.frust=clamp(h.frust+15));followUp('#random',rh(),'you picked a side and now half the room is annoyed with you')}else{allH(h=>h.needs.fun=clamp(h.needs.fun+20));followUp('#random',rh(),'your meme was the best one 😂')}}},
       {label:'Mute the thread',fn:()=>{if(heated)later(20,()=>{allH(h=>h.frust=clamp(h.frust+6));post('#random',rh(),'the tabs thread is still going and has spilled into #general')})}}]}},
-  ()=>{const few=Math.random()<.5;return {ch:'#hackathon',user:VENUE,
+  ()=>{const few=random()<.5;return {ch:'#hackathon',user:VENUE,
     text:`Hex sticker supplies are running low. ${tell(few,'There is one box left.','There are still about 20 sheets in the cupboard.')}`,
     actions:[
       {label:'Order more (−30)',cost:30,fn:()=>{allH(h=>h.needs.fun=clamp(h.needs.fun+(few?20:5)));if(!few)followUp('#hackathon',VENUE,'Found 20 sheets in the cupboard. We now have a lot of stickers.')}},
       {label:'Ration them',fn:()=>{if(few){S.noStickers=60;allH(h=>h.needs.fun=clamp(h.needs.fun-15));followUp('#hackathon',VENUE,'The sticker stand is empty for a while.')}else allH(h=>h.needs.fun=clamp(h.needs.fun-3))}}]}},
-  ()=>{const covered=Math.random()<.5;return {ch:'#general',user:NEWCOMER,
+  ()=>{const covered=random()<.5;return {ch:'#general',user:NEWCOMER,
     text:`Is there a pipeline for my data? ${tell(covered,pick(['It is 16S amplicon sequencing.','It is bulk RNA-seq from mouse liver.']),pick(['It is spatial proteomics from a brand new instrument.','It is long-read data from a very unusual organism.']))}`,
     actions:[
       {label:'"Come to the hackathon!"',fn:()=>{for(let i=0;i<2;i++){const h=spawnHacker();h.newbie=true;h.needs.fun=covered?30:90}if(!covered)S.stars+=5;followUp('#general',BOT,covered?'They came, then found an existing pipeline already does it. A bit bored now.':'Two keen newcomers arrived with a new use case. Expect some rough first PRs.')}},
       {label:'Point them to the website',fn:()=>{S.rep=clamp(S.rep+(covered?5:-5));if(!covered)followUp('#general',NEWCOMER,'nothing there does what I need. Oh well')}}]}},
-  ()=>{const long=Math.random()<.5;return {ch:'#hackathon',user:VENUE,
+  ()=>{const long=random()<.5;return {ch:'#hackathon',user:VENUE,
     text:`The venue Wi-Fi just dropped. ${tell(long,'Venue staff say an engineer can come tomorrow.','The router is rebooting and IT are on it.')}`,
     actions:[
       {label:'Phone hotspot (−20)',cost:20,fn:()=>{if(!long)followUp('#hackathon',VENUE,'The router came back two minutes later anyway.')}},
       {label:'Call it a coffee break',fn:()=>{if(long){S.noWifi=45;allH(h=>h.frust=clamp(h.frust+8));followUp('#hackathon',VENUE,'No Wi-Fi for a while. Nobody can push code.')}else allH(h=>{h.needs.caffeine=clamp(h.needs.caffeine+20);h.needs.fun=clamp(h.needs.fun+5)})}}]}},
-  ()=>{const bad=Math.random()<.5;return {ch:'#modules',user:rh(),
+  ()=>{const bad=random()<.5;return {ch:'#modules',user:rh(),
     text:`Opened one PR that touches 300 modules at once. Notes: ${tell(bad,'regex find and replace, did not run the tests','scripted bump, all module tests pass')}.`,
     actions:[
       {label:'Ask a hacker to review it',fn:()=>startTask('Reviewing a 300 module PR',20,()=>{if(bad){S.stars+=5;post('#modules',GH,'The review caught a broken regex in dozens of modules. Sent back, nothing merged.')}else{S.merged+=3;S.dayMerged+=3;S.stars+=10;post('#modules',GH,'Thorough review, clean PR. Merged.')}})},
-      {label:'LGTM 👍',fn:()=>{S.merged+=3;S.dayMerged+=3;if(bad){const owned=NEEDED.filter(m=>S.mods.has(m)&&!S.badMods.has(m));for(let i=0;i<2&&owned.length;i++){const m=owned.splice(Math.floor(Math.random()*owned.length),1)[0];later(rnd(15,40),()=>breakModule(m,'a bug from the 300 module PR'))}}}}]}},
-  ()=>{const big=Math.random()<.5;return {ch:'#modules',user:rh(),
+      {label:'LGTM 👍',fn:()=>{S.merged+=3;S.dayMerged+=3;if(bad){const owned=NEEDED.filter(m=>S.mods.has(m)&&!S.badMods.has(m));for(let i=0;i<2&&owned.length;i++){const m=owned.splice(Math.floor(random()*owned.length),1)[0];later(rnd(15,40),()=>breakModule(m,'a bug from the 300 module PR'))}}}}]}},
+  ()=>{const big=random()<.5;return {ch:'#modules',user:rh(),
     text:`Review comment on my module: "please Harshil-align this". ${tell(big,'It is a 40 line input block full of `=` signs.','It is three lines.')}`,
     actions:[
       {label:'Ask a hacker to align it',fn:()=>startTask('Harshil-aligning a main.nf',big?14:4,()=>{S.stars+=big?12:4;allH(h=>h.needs.fun=clamp(h.needs.fun+(big?10:3)));post('#modules',BOT,big?'📏 Forty lines, every `=` in one column. Reviewers are moved.':'📏 Aligned. That took less time than this thread.')})},
@@ -1021,7 +1081,7 @@ function endDay(){
   if(S.credits<0)S.debtDays++;else S.debtDays=0;
   if(S.debtDays>=2){lose('bankrupt');return}
   const sc=score();let best=0;
-  try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(sc>best){localStorage.setItem('nfcore-hackathon-best',sc);best=sc}}catch(e){best=Math.max(best,sc)}
+  try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(sc>best){if(!replaying)localStorage.setItem('nfcore-hackathon-best',sc);best=sc}}catch(e){best=Math.max(best,sc)}
   const nu=TIER_NOTES[S.day]||'Tomorrow will be a little busier again.';
   showModal(`<h2 class="px">Day ${S.day} wrapped</h2>
     <div class="score"><span>Modules merged today</span><b>${S.dayMerged}</b>
@@ -1081,7 +1141,7 @@ function lose(r){if(S.over)return;S.paused=true;endGame(r)}
 function endGame(reason){
   S.over=true;
   const parts=scoreParts(),total=score();
-  let best=0;try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(total>best)localStorage.setItem('nfcore-hackathon-best',total)}catch(e){}
+  let best=0;try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(total>best&&!replaying)localStorage.setItem('nfcore-hackathon-best',total)}catch(e){}
   const [title,why]=LOSE[reason]||['Hackathon over',''];
   showModal(`<h2 class="px">${title}</h2><p>${why} You lasted until day ${S.day}, ${clockStr()}.</p>
     <div class="score">${parts.map(p=>`<span>${p[0]} (${p[1]})</span><b>${p[2]}</b>`).join('')}
@@ -1089,7 +1149,7 @@ function endGame(reason){
     <p>${total>best?'New best score.':'Best score: '+best}</p>
     <button class="btn primary" data-act="again">Run another hackathon</button>`);
 }
-function showModal(html,cls){const o=$('#overlay');o.innerHTML=`<div class="modal ${cls||''}" role="dialog" aria-modal="true">${html}</div>`;o.style.display='flex';const b=o.querySelector('button');if(b)b.focus({preventScroll:true})}
+function showModal(html,cls){const o=$('#overlay');o.innerHTML=`<div class="modal ${cls||''}" role="dialog" aria-modal="true">${html} <button class="btn" data-cloud="open" style="margin-top:8px">Save &amp; scores</button></div>`;o.style.display='flex';const b=o.querySelector('button');if(b&&!replaying)b.focus({preventScroll:true})}
 function hideModal(){$('#overlay').style.display='none'}
 function intro(){
   showModal(`<h2 class="px">Hackathon Tycoon</h2>
@@ -1252,9 +1312,10 @@ function modeCost(){return S.mode?(S.mode.kind==='pipe'?PIPES[S.mode.type].cost:
 function tileAt(e){const b=canvas.getBoundingClientRect();return [(e.clientX-b.left)/T,(e.clientY-b.top)/T]}
 canvas.addEventListener('pointermove',e=>{const [x,y]=tileAt(e);S.hover=[Math.floor(x),Math.floor(y)]});
 canvas.addEventListener('pointerleave',()=>{S.hover=null});
-canvas.addEventListener('click',e=>{
+canvas.addEventListener('click',e=>gameAction('map',JSON.stringify(tileAt(e))));
+function mapClick(fx,fy){
   if(S.over)return;
-  const [fx,fy]=tileAt(e);const c=Math.floor(fx),r=Math.floor(fy);if(!inb(c,r))return;
+  const c=Math.floor(fx),r=Math.floor(fy);if(!inb(c,r))return;
   if(S.mode){
     const [w,h]=modeSize();const [oc,or]=fitOrigin(c,r,w,h);S.hover=[c,r];
     const cost=modeCost();
@@ -1270,15 +1331,20 @@ canvas.addEventListener('click',e=>{
   if(hit){S.sel={t:'h',id:hit.id};renderInspect(true);return}
   const id=S.grid[r][c];
   S.sel=id!=null?{t:'o',id}:null;renderInspect(true);
-});
+}
 function flash(t){const el=$('#modetext');if(el&&S.mode){const prev=el.textContent;el.textContent=t;setTimeout(()=>updateModebar(),1400)}}
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b||b.disabled)return;
-  const act=b.dataset.act,arg=b.dataset.arg;
+  if(b.dataset.act==='again'){newGame();gameAction('start');return}
+  gameAction(b.dataset.act,b.dataset.arg||'');
+});
+function gameAction(act,arg=''){
+  if(!replaying)replay.commands.push({step:replay.steps,act,arg});
   switch(act){
     case 'start':hideModal();S.paused=false;break;
     case 'nextday':nextDay();break;
-    case 'again':newGame();hideModal();S.paused=false;renderPanel(true);break;
+    case 'map':mapClick(...JSON.parse(arg));break;
+    case 'egg':if(!S['egg_'+arg]){S['egg_'+arg]=1;EGGS[arg]()}break;
     case 'speed':{const n=+arg;if(n===0)S.paused=true;else{S.paused=false;S.speed=n}break}
     case 'tab':S.tab=arg;if(arg==='slack'){S.unread=0;$('#toast').style.display='none'}renderPanel(true);break;
     case 'build':S.mode=(S.mode&&S.mode.type===arg)?null:{kind:'fac',type:arg};break;
@@ -1301,16 +1367,17 @@ document.addEventListener('click',e=>{
     case 'ledger':S.sel=S.sel&&S.sel.t==='ledger'?null:{t:'ledger'};break;
     case 'desel':S.sel=null;break;
   }
-  updateHUD();updateModebar();renderPanel(true);renderInspect(true);renderCI();
-});
+  if(!replaying){updateHUD();updateModebar();renderPanel(true);renderInspect(true);renderCI()}
+}
 let typed='';
 const EGGS={
   resume:()=>{earn('Cached work dir',40);note('💾 -resume: found a cached work directory. +40 credits.')},
   harshil:()=>{S.stars+=5;note('📏 Everything on this floor is now perfectly aligned. +5 ⭐')},
   hackathon:()=>{allH(h=>h.needs.fun=clamp(h.needs.fun+15));note('🎉 Someone put on the hackathon playlist. Fun +15.')}};
 document.addEventListener('keydown',e=>{
-  if(e.key.length===1&&!S.over){typed=(typed+e.key.toLowerCase()).slice(-12);for(const k in EGGS)if(typed.endsWith(k)&&!S['egg_'+k]){S['egg_'+k]=1;EGGS[k]();updateHUD()}}
-  if(e.key==='Escape'){S.mode=null;S.sel=null;updateModebar();renderInspect(true)}if((e.key==='r'||e.key==='R')&&S.mode&&S.mode.kind==='pipe'){S.mode.rot=!S.mode.rot;updateModebar()}});
+  if($('#cloud').open||e.target.closest('input,textarea,[contenteditable]'))return;
+  if(e.key.length===1&&!S.over){typed=(typed+e.key.toLowerCase()).slice(-12);for(const k in EGGS)if(typed.endsWith(k)&&!S['egg_'+k])gameAction('egg',k)}
+  if(e.key==='Escape'){gameAction('cancel');gameAction('desel')}if((e.key==='r'||e.key==='R')&&S.mode&&S.mode.kind==='pipe')gameAction('rotate')});
 
 /* ---------- UI ---------- */
 const lastHTML={};
@@ -1415,14 +1482,18 @@ function renderInspect(force){
 let last=performance.now(),uiT=0;
 function loop(now){
   const dt=Math.min(.1,(now-last)/1000);last=now;
-  if(!S.paused&&!S.over){let g=dt*S.speed;while(g>0){const s=Math.min(.05,g);update(s);g-=s;if(S.paused)break}}
+  if(!S.paused&&!S.over){accumulator+=dt*S.speed;while(accumulator>=.05){advanceGame();accumulator-=.05;if(S.paused)break}}
+  else accumulator=0;
   draw(now);
   uiT+=dt;if(uiT>.35){uiT=0;updateHUD();renderPanel(false);renderInspect(false);renderCI()}
   requestAnimationFrame(loop);
 }
+function advanceGame(){update(.05);replay.steps++}
 window.addEventListener('resize',resize);
 newGame();resize();updateHUD();renderPanel(true);renderCI();intro();
 requestAnimationFrame(loop);
 </script>
+<script src="replay.js"></script>
+<script src="cloud.js"></script>
 </body>
 </html>
