@@ -1,0 +1,22 @@
+{
+  "name": "hackerthon-tycoon",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "build:assets": "node scripts/build.mjs",
+    "build": "cf build",
+    "dev": "cf dev",
+    "test": "node --test backend/api.test.mjs",
+    "test:browser": "playwright test",
+    "check": "tsc --noEmit",
+    "deploy": "cf deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261015.1",
+    "@playwright/test": "^1.64.1",
+    "cf": "1.0.0-beta.17",
+    "typescript": "5.9.3",
+    "wrangler": "4.151.0"
+  }
+}
