@@ -5,7 +5,7 @@ interface Env {
 }
 
 const MAX_BODY = 512 * 1024;
-const actions = new Set('start,nextday,speed,tab,build,buildpipe,rotate,cancel,sl,assign,upgrade,release,profile,remove,hire,ledger,desel,map,egg'.split(','));
+const actions = new Set('start,nextday,speed,tab,build,buildpipe,rotate,cancel,sl,assign,upgrade,release,profile,remove,hire,hack,force,prod,ledger,desel,map,egg'.split(','));
 const json = (value: unknown, status = 200, headers = {}) => Response.json(value, {
   status, headers: { 'Cache-Control': 'no-store', ...headers },
 });
@@ -48,7 +48,7 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 }
 
 function validateSave(value: unknown): void {
-  if (!object(value) || value.version !== 1 || !integer(value.seed, 0, 0xffffffff)
+  if (!object(value) || value.version !== 2 || !integer(value.seed, 0, 0xffffffff)
     || !integer(value.steps, 0, 250000) || !Array.isArray(value.commands) || value.commands.length > 10000) {
     throw new InputError('Invalid replay save.');
   }

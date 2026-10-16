@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 let worker, persistence;
 const token = n => n.toString(16).padStart(64, '0');
-const replay = { version: 1, seed: 4294967295, steps: 10, commands: [{ step: 0, act: 'start', arg: '' }, { step: 10, act: 'nextday', arg: '' }] };
+const replay = { version: 2, seed: 4294967295, steps: 10, commands: [{ step: 0, act: 'start', arg: '' }, { step: 10, act: 'nextday', arg: '' }] };
 const start = () => unstable_startWorker({
   dev: {
     experimentalNewConfig: true, remote: false, persist: persistence,
@@ -59,7 +59,7 @@ test('HTTP errors, JSON requirements, origin and authorization boundaries', asyn
 });
 
 test('validates every replay field and streamed body byte limit without Content-Length', async () => {
-  const invalid = [null, {}, { ...replay, version: 2 }, { ...replay, seed: -1 }, { ...replay, seed: 4294967296 },
+  const invalid = [null, {}, { ...replay, version: 1 }, { ...replay, seed: -1 }, { ...replay, seed: 4294967296 },
     { ...replay, steps: 250001 }, { ...replay, steps: 1.5 }, { ...replay, commands: {} },
     { ...replay, commands: Array(10001).fill({ step: 0, act: 'start', arg: '' }) },
     ...[{ step: 11, act: 'start', arg: '' }, { step: -1, act: 'start', arg: '' }, { step: 1, act: 'unknown', arg: '' },

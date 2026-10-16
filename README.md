@@ -11,7 +11,7 @@ A browser game where you run an nf-core hackathon for as long as you can.
 
 ## Play
 
-The original offline game is at <https://adamrtalbot.github.io/hackerthon-tycoon/>. This version adds cloud saves and a shared leaderboard to [adamrtalbot/hackerthon-tycoon](https://github.com/adamrtalbot/hackerthon-tycoon), imported from [b8f2f0f](https://github.com/adamrtalbot/hackerthon-tycoon/commit/b8f2f0fcac5fc60eb6c1337657e7b1e0dade5886).
+Play offline at <https://adamrtalbot.github.io/hackerthon-tycoon/>. A Cloudflare Worker deployment also supports cloud saves and a shared leaderboard.
 
 Open `index.html` to play without a backend, or run the Cloudflare Worker below for cloud features. GitHub Pages alone cannot run the backend. The game and `/api/*` must be served from the same Worker origin; no cross-origin credentials or API keys are embedded in the client.
 
@@ -57,7 +57,7 @@ The deployment serves the game and API together on the Worker URL printed by `cf
 
 Each player's recovery code is hashed with SHA-256 to select their own Durable Object. Saves use atomic revision checks; the global leaderboard uses an indexed SQLite table. Requests are bounded to 512 KiB. Recovery codes go only in authorization headers, never URLs or public leaderboard entries. Only names, scores and days are published.
 
-Saves store a seeded, fixed-timestep replay rather than serializing live JavaScript functions. This preserves pending Slack actions, timed effects and task callbacks. Version 1 accepts up to 250,000 simulation ticks (about 83 game days) and 10,000 commands. Loading cost grows with game length. Changes to simulation rules, random-call order or the timestep must introduce a new save version and either retain the old replay implementation or explicitly reject old saves. Roll back code and static assets together; keep Durable Object data and export declarations intact. Rolling back to a build that predates cloud support hides cloud features but does not delete saves.
+Saves store a seeded, fixed-timestep replay rather than serializing live JavaScript functions. This preserves pending Slack actions, timed effects and task callbacks. Version 2 includes the unlocked ideas and accepts up to 250,000 simulation ticks (about 83 game days) and 10,000 commands. Experimental version 1 saves are rejected because they predate those simulation rules. Loading cost grows with game length. Changes to simulation rules, random-call order or the timestep must introduce a new save version and either retain the old replay implementation or explicitly reject old saves. Roll back code and static assets together; keep Durable Object data and export declarations intact. Rolling back to a build that predates cloud support hides cloud features but does not delete saves.
 
 ## Tests
 

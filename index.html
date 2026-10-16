@@ -313,7 +313,7 @@ const canvas=$('#map'), ctx=canvas.getContext('2d');
 
 /* ---------- setup ---------- */
 function newGame(seed=crypto.getRandomValues(new Uint32Array(1))[0]){
-  replay={version:1,seed,steps:0,commands:[]};randomState=seed;accumulator=0;
+  replay={version:2,seed,steps:0,commands:[]};randomState=seed;accumulator=0;
   S={credits:550,stars:0,merged:0,released:0,day:1,t:0,speed:1,paused:true,over:false,
     grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
     objs:[],hackers:[],staff:[],mods:new Set(['fastqc','multiqc']),prs:[],slack:[],unread:0,
@@ -652,29 +652,29 @@ function doHack(k){
 }
 function claudePR(pr){
   spend('Claude tokens',Math.round(rnd(1,3)));
-  if(Math.random()<.03){const c=Math.max(40,Math.round(S.credits*.25));spend('Claude tokens',c);
+  if(random()<.03){const c=Math.max(40,Math.round(S.credits*.25));spend('Claude tokens',c);
     post('#modules',BOT,pick([`🤖 Claude read the entire repo "for context" before reviewing \`${pr.mod}\`. 🪙−${c}`,`🤖 Claude refactored every module that imports \`${pr.mod}\`. Nobody asked. 🪙−${c}`]))}
   later(3,()=>{if(!S.prs.includes(pr))return;spend('Claude tokens',1);
-    if(pr.bad&&Math.random()>.4)requestChanges(pr.id,'Claude');else approvePR(pr.id,'Claude')});
+    if(pr.bad&&random()>.4)requestChanges(pr.id,'Claude');else approvePR(pr.id,'Claude')});
 }
 function agentPR(s){
-  const pr={id:nid(),mod:pickMod(),author:s.id,authorName:s.name,age:0,msg:null,q:.75,bad:Math.random()<.25,notes:[]};
+  const pr={id:nid(),mod:pickMod(),author:s.id,authorName:s.name,age:0,msg:null,q:.75,bad:random()<.25,notes:[]};
   S.prs.push(pr);approvePR(pr.id,'the swarm');floater(s.x,s.y-.3,'🤖 merged','#B9F6CA');
 }
 /* bribe the linter: half of all breakage is postponed, not prevented */
-function hide(){if(S.bribeT>0&&!S.megaLock&&Math.random()<.5){S.hidden++;return true}return false}
+function hide(){if(S.bribeT>0&&!S.megaLock&&random()<.5){S.hidden++;return true}return false}
 function bribeDue(){
   const n=Math.min(S.hidden,4);S.hidden=0;
   post('#pipelines',BOT,n?`🤫 The bribe ran out. The linter remembers everything: ${n} hidden failure${n>1?'s':''} just went red.`:'🤫 The bribe ran out. Nothing was hiding. This time.');
   for(let i=0;i<n;i++){const ps=pipes().filter(o=>!o.broken),ms=[...S.mods].filter(m=>!S.badMods.has(m));
-    if(ps.length&&Math.random()<.5)breakPipe(pick(ps),'a failure the linter was paid to ignore');else if(ms.length)breakModule(pick(ms),'a failure the linter was paid to ignore')}
+    if(ps.length&&random()<.5)breakPipe(pick(ps),'a failure the linter was paid to ignore');else if(ms.length)breakModule(pick(ms),'a failure the linter was paid to ignore')}
 }
 function forcePush(j){
   if(!S.hu.has('force')||j.kind==='task'||!stillBroken(j))return;
   S.rep=clamp(S.rep-4);
   if(j.kind==='mod')fixModule(j.ref,'Force-pushed');else fixPipe(j.ref,'Force-pushed');
   note('💥 Force-pushed. Reputation −4.');
-  if(Math.random()<.2){const ok=[...S.mods].filter(m=>!S.badMods.has(m));if(!ok.length)return;
+  if(random()<.2){const ok=[...S.mods].filter(m=>!S.badMods.has(m));if(!ok.length)return;
     const m=pick(ok);S.mods.delete(m);
     post('#modules',GH,`💥 The force-push rewrote history. \`${m}\` no longer exists. Someone will have to write it again.`);
     for(const o of pipes())if(pMods(o).includes(m))breakPipe(o,`\`${m}\` was force-pushed out of existence`)}
@@ -684,7 +684,7 @@ function prodRun(id){
   const p=PIPES[o.type],bill=p.run*Math.max(1,p.rel-o.green)*3;
   S.prodBill+=bill;o.green=p.rel;floater(o.c+1,o.r,'🏭 green','#FFE08A');
   post('#pipelines',BOT,`🏭 Ran test_full on production data for nf-core/${o.type}. It is ready for v1.0.0. The bill, about 🪙${bill}, arrives tomorrow morning.`);
-  if(Math.random()<.25){S.rep=clamp(S.rep-8);followUp('#pipelines',CORE,'Someone noticed the "test" bucket had real patient data in it. Reputation −8.')}
+  if(random()<.25){S.rep=clamp(S.rep-8);followUp('#pipelines',CORE,'Someone noticed the "test" bucket had real patient data in it. Reputation −8.')}
 }
 function updHacks(dt){
   checkHacks();
@@ -693,16 +693,16 @@ function updHacks(dt){
   if(S.hk.swarm){
     S.tokAcc+=S.staff.filter(s=>s.type==='agent').length*.15*(1+S.swarmLoop)*dt;
     if(S.tokAcc>=1){const c=Math.floor(S.tokAcc);S.tokAcc-=c;spend('Swarm tokens',c)}
-    S.loopT-=dt;if(S.loopT<=0){S.loopT=30;if(Math.random()<.35){S.swarmLoop++;post('#modules',BOT,`🐝 The agents are now reviewing each other's reviews. Token burn is ×${1+S.swarmLoop}.`)}}
+    S.loopT-=dt;if(S.loopT<=0){S.loopT=30;if(random()<.35){S.swarmLoop++;post('#modules',BOT,`🐝 The agents are now reviewing each other's reviews. Token burn is ×${1+S.swarmLoop}.`)}}
   }
 }
 /* overnight consequences, after the new day's ledger starts */
 function morningHacks(){
   if(S.prodBill){spend('Prod compute bill',S.prodBill);post('#hackathon',CORE,`🏭 The cloud bill for test_full on prod data arrived: 🪙−${S.prodBill}.`);S.prodBill=0}
-  if(S.rustP!=null&&Math.random()<.35){S.rustP=Math.max(0,S.rustP-20);post('#random',rh(),'🦀 the borrow checker rejected last night\'s work. Rust rewrite progress −20%')}
+  if(S.rustP!=null&&random()<.35){S.rustP=Math.max(0,S.rustP-20);post('#random',rh(),'🦀 the borrow checker rejected last night\'s work. Rust rewrite progress −20%')}
   if(S.hk.fork){
     const live=S.hackers.filter(h=>h.state!=='leave'),n=Math.min(Math.max(0,live.length-3),1+Math.floor(rnd(0,2)));
-    for(let i=0;i<n;i++){const h=live.splice(Math.floor(Math.random()*live.length),1)[0];release(h);if(h.job){claim(h.job,false);h.job=null}S.hackers=S.hackers.filter(x=>x!==h)}
+    for(let i=0;i<n;i++){const h=live.splice(Math.floor(random()*live.length),1)[0];release(h);if(h.job){claim(h.job,false);h.job=null}S.hackers=S.hackers.filter(x=>x!==h)}
     if(n)post('#hackathon',CORE,`🍴 ${n} hacker${n>1?'s':''} went back to upstream nf-core overnight.`);
   }
 }

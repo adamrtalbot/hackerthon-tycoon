@@ -136,7 +136,7 @@ test('changing recovery identity in another tab blocks writes until explicitly r
   await expect(second.locator('#cloud-status')).toContainText('Loaded day 1');
   const before = await second.evaluate(() => exportReplay());
   const otherCode = 'b'.repeat(64);
-  const otherSave = { version: 1, seed: 20, steps: 0, commands: [] };
+  const otherSave = { version: 2, seed: 20, steps: 0, commands: [] };
   expect((await context.request.put('/api/save', {
     headers: { Authorization: `Bearer ${otherCode}` }, data: { revision: 0, save: otherSave },
   })).ok()).toBe(true);
@@ -204,4 +204,31 @@ test('placement feedback survives HUD refreshes and clears for the next placemen
   await page.locator('#map').click({ position: { x: 2.5 * tile, y: 4.5 * tile } });
   await expect(page.locator('#modetext')).toContainText('Placing Pizza table');
   expect(await page.evaluate(() => S.objs.filter(o => o.type === 'pizza').length)).toBe(1);
+});
+
+test('upstream unlocked ideas survive cloud save and deterministic replay', async ({ page }) => {
+  await page.goto('/');
+  const before = await page.evaluate(() => {
+    newGame(42);gameAction('start');
+    gameAction('build','pizza');gameAction('map','[2.5,4.5]');gameAction('cancel');
+    for(let i=0;i<6000&&!S.over&&!S.hk.claude;i++){
+      if(S.paused)gameAction('nextday');
+      for(const pr of [...S.prs])gameAction('sl',`${pr.msg}:0`);
+      if(S.hu.has('claude'))gameAction('hack','claude');
+      advanceGame();
+    }
+    gameAction('hack','bribe');
+    for(let i=0;i<400&&!S.paused;i++)advanceGame();
+    gameAction('speed','0');
+    return {claude:S.hk.claude,credits:S.credits,merged:S.merged,messages:S.slack.map(m=>m.text)};
+  });
+  expect(before.claude).toBe(true);
+  await openCloud(page);
+  await page.getByRole('button', { name: 'Save game', exact: true }).click();
+  await expect(page.locator('#cloud-status')).toContainText('Saved day');
+  await page.reload();
+  await openCloud(page);
+  await page.getByRole('button', { name: 'Load game', exact: true }).click();
+  await expect(page.locator('#cloud-status')).toContainText('Loaded day');
+  expect(await page.evaluate(() => ({claude:S.hk.claude,credits:S.credits,merged:S.merged,messages:S.slack.map(m=>m.text)}))).toEqual(before);
 });
