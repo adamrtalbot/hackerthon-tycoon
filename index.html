@@ -254,7 +254,7 @@ function newGame(){
     grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
     objs:[],hackers:[],staff:[],mods:new Set(['fastqc','multiqc']),prs:[],slack:[],unread:0,
     rep:60,mode:null,sel:null,tab:'build',nextId:1,spawnT:3,nextEvent:45,nextChat:7,
-    breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],debtDays:0,lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
+    breakMod:0,breakModT:0,slow:0,timers:[],floaters:[],hapSum:0,hapN:0,unlocked:new Set(),badMods:new Set(),modClaim:new Set(),modMsg:{},tasks:{},today:{},recent:[],log:[],lowRepT:0,meltT:0,emptyT:0,warn:{},rotT:70,dayCompute:0,dayUsers:0,drift:0,noStickers:0,noWifi:0,
     names:new Set(),dayMerged:0,dayLeft:0,hover:null,toastT:0,
     hu:new Set(),hk:{},claudeOn:false,bribeT:0,hidden:0,prodBill:0,rustP:null,rustDone:false,swarmLoop:0,tokAcc:0,loopT:30};
   addObj('fac','table',3,8); addObj('fac','table',8,8); addObj('fac','coffee',5,4);
@@ -1018,8 +1018,7 @@ function endDay(){
   S.paused=true;
   const staffCost=S.staff.filter(s=>s.type!=='agent').length*40, grant=Math.max(0,Math.round(S.rep*2.5)-15*S.dayLeft);
   earn('Sponsor grant',grant);if(staffCost)spend('Salaries',staffCost);
-  if(S.credits<0)S.debtDays++;else S.debtDays=0;
-  if(S.debtDays>=2){lose('bankrupt');return}
+  if(S.credits<0){lose('bankrupt');return}
   const sc=score();let best=0;
   try{best=+localStorage.getItem('nfcore-hackathon-best')||0;if(sc>best){localStorage.setItem('nfcore-hackathon-best',sc);best=sc}}catch(e){best=Math.max(best,sc)}
   const nu=TIER_NOTES[S.day]||'Tomorrow will be a little busier again.';
@@ -1030,7 +1029,6 @@ function endDay(){
     <div class="score">${ledgerRows()}<span class="tot">Net today</span><b class="tot">${sgn(Object.values(S.today).reduce((a,b)=>a+b,0))}</b>
     <span>Credits now</span><b>${Math.round(S.credits)}</b></div>
     <div class="score"><span>Running score</span><b>${sc}</b><span>Best score</span><b>${best}</b></div>
-    ${S.debtDays?'<p style="color:var(--bad)"><b>You ended the day in debt. If you are still below zero at the end of tomorrow, the hackathon goes bankrupt.</b></p>':''}
     <p>${nu}</p>
     <p>Everyone heads to the pub, sleeps, and comes back tomorrow with refilled batteries.</p>
     <button class="btn primary" data-act="nextday">Start day ${S.day+1}</button>`);
@@ -1050,7 +1048,7 @@ function score(){return scoreParts().reduce((s,p)=>s+p[2],0)}
 /* ---------- losing ---------- */
 const MELT_LIMIT=60,EMPTY_LIMIT=40,REP_FLOOR=30,REP_DAYS=.6;
 const LOSE={
-  bankrupt:['Bankrupt','You ended two days in a row in debt, and the sponsors pulled out.'],
+  bankrupt:['Bankrupt','You ended the day in debt, and the sponsors pulled out.'],
   rep:['Cancelled','Reputation stayed critical for too long, so the core team called the hackathon off.'],
   melt:['CI meltdown','Every pipeline and a pile of modules stayed red for too long. The core team pulled the plug.'],
   empty:['Empty venue','Everyone went home and nobody new turned up.']};
@@ -1071,7 +1069,7 @@ function checkLose(dt){
 }
 function dangerChips(){
   const hr=DAY_LEN/12;let h='';
-  if(S.credits<0)h+=`<span class="stat danger" title="End the day below zero twice in a row and you go bankrupt">💸 Debt${S.debtDays?', last chance':''}</span>`;
+  if(S.credits<0)h+=`<span class="stat danger" title="End the day below zero and you go bankrupt">💸 Debt</span>`;
   if(S.lowRepT>0)h+=`<span class="stat danger" title="Reputation is critical. Raise it before the hackathon is cancelled.">📉 Low reputation ${Math.max(1,Math.ceil((DAY_LEN*REP_DAYS-S.lowRepT)/hr))}h</span>`;
   if(S.meltT>0)h+=`<span class="stat danger" title="CI meltdown. Get something green.">🔥 Meltdown ${Math.max(1,Math.ceil((MELT_LIMIT-S.meltT)/hr))}h</span>`;
   if(S.emptyT>0)h+=`<span class="stat danger" title="Nobody is here${S.rep<20?', and nobody new will come':''}">🚪 Empty</span>`;
@@ -1130,7 +1128,7 @@ function intro(){
     <span>⭐</span><span>GitHub stars, part of your score</span>
     <span>CI</span><span>One light per pipeline and module. Red blinks.</span></div></div></details>
   <details class="more" name="intro"><summary>🏁 <b>How it ends</b><small>Four ways to lose</small></summary><div class="body"><ul>
-    <li>💸 Two days in a row in debt</li>
+    <li>💸 Ending a day in debt</li>
     <li>📉 Reputation below ${REP_FLOOR} for too long</li>
     <li>🔥 Every pipeline and several modules red</li>
     <li>🚪 Every hacker goes home</li></ul>
